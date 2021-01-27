@@ -1,0 +1,8 @@
+eng:
+  labels:
+    baqio_short_description: Software business management
+    baqio_long_description:  Baqio is a specialized wine and alcohol business management software that automates the administrative
+    baqio_url: https://www.baqio.com/
+    api_key: API Key
+    api_password: Password
+    api_secret: Secret
