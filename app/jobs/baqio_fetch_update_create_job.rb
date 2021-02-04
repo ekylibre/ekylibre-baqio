@@ -13,7 +13,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             # order[:customer][:name]
             # order[:customer][:email]
             # order[:customer][:]
-            entities = Entity.where("provider ->> 'id' = ?", order[:id].to_s)
+            entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
             if entities.any?
               puts entities.first.inspect.yellow
               entity = entities.first
@@ -28,8 +28,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               entity = Entity.create!(
                 first_name: order[:customer][:billing_information][:first_name],
                 last_name: custom_name,
-                provider: { id: order[:id] }
+                provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
               )
+              puts entity.inspect.green
 
               baqio_custumer_address = build_address(
                 order[:customer][:billing_information][:address], 
