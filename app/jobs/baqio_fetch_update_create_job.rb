@@ -23,12 +23,37 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                             else
                               order[:customer][:billing_information][:last_name]
                             end
-
+              # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
+              # Need API update from Baqio, method customer/id doesn't work
               entity = Entity.create!(
                 first_name: order[:customer][:billing_information][:first_name],
                 last_name: custom_name,
                 provider: { id: order[:id] }
               )
+
+              baqio_custumer_address = build_address(
+                order[:customer][:billing_information][:address], 
+                order[:customer][:billing_information][:city], 
+                order[:customer][:billing_information][:zip]
+              )
+
+              entity_addresses = Array.new([
+                { mobile: order[:customer][:billing_information][:mobile] },
+                { mail: baqio_custumer_address },
+                { email: order[:customer][:billing_information][:email] },
+                { website: order[:customer][:billing_information][:website] }
+              ])
+              
+              # Create EntityAddress for every valid entity_addresses got from Baqio
+              entity_addresses.each do |entity_address|
+                unless entity_address.values.first.blank?
+                  EntityAddress.create!(
+                    entity_id: entity.id,
+                    canal: entity_address.keys.first.to_s,
+                    coordinate: entity_address.values.first
+                  )
+                end
+              end
             end
 
             # Create or Find Sale
@@ -46,6 +71,16 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   private
+
+  def build_address(address, city, zip)
+    return nil if address.blank? && city.blank? && zip.blank?
+
+    build_a = address.nil? ? "" : address + ", "
+    build_c = city.nil? ? "" : city + ", "
+    build_z = zip.nil? ? "" : zip
+
+    "#{build_a}#{build_c}#{build_z}"
+  end
 
   def error_notification_params(error)
     {
