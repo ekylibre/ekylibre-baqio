@@ -23,7 +23,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             # order[:customer][:]
             entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
             if entities.any?
-              puts entities.first.inspect.yellow
               entity = entities.first
             else
               custom_name = if order[:customer][:billing_information][:last_name].nil? 
@@ -38,33 +37,27 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                 last_name: custom_name,
                 provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
               )
-              puts entity.inspect.green
-
-              baqio_custumer_address = build_address(
-                order[:customer][:billing_information][:address], 
-                order[:customer][:billing_information][:city], 
-                order[:customer][:billing_information][:zip]
-              )
 
               zip_city = build_address_cz(
-                order[:customer][:billing_information][:city], 
+                order[:customer][:billing_information][:city],
                 order[:customer][:billing_information][:zip]
               )
 
               entity_addresses = Array.new([
                 { mobile: order[:customer][:billing_information][:mobile] },
-                { mail: " ", zip_city: zip_city },
+                { zip_city: zip_city , mail: order[:customer][:billing_information][:address1]},
                 { email: order[:customer][:billing_information][:email] },
                 { website: order[:customer][:billing_information][:website] }
               ])
-              
+
               # Create EntityAddress for every valid entity_addresses got from Baqio
               entity_addresses.each do |entity_address|
                 unless entity_address.values.first.blank?
-                  if entity_address.keys.first == :mail 
+                  if entity_address.keys.last == :mail 
                     EntityAddress.create!(
                       entity_id: entity.id,
-                      canal: entity_address.keys.first.to_s,
+                      canal: "mail",
+                      mail_line_4: entity_address[:mail],
                       mail_line_6: entity_address[:zip_city]
                     )
                   else
@@ -89,20 +82,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       Rails.logger.error $!
       Rails.logger.error $!.backtrace.join("\n")
       ExceptionNotifier.notify_exception($!, data: { message: error })
-    end while @page_with_orders.blank? == false
+    end while @page_with_orders.blank? == false || @page == 50
   end
 
   private
 
-  def build_address(address, city, zip)
-    return nil if address.blank? && city.blank? && zip.blank?
-
-    build_a = address.nil? ? "" : address + ", "
-    build_c = city.nil? ? "" : city + ", "
-    build_z = zip.nil? ? "" : zip
-
-    "#{build_a}#{build_c}#{build_z}"
-  end
 
   def build_address_cz(city, zip)
     return nil if city.blank? && zip.blank?
