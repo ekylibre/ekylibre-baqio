@@ -3,10 +3,18 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   include Rails.application.routes.url_helpers
 
   def perform
+    # Page need to be set-up to fetch orders from different Baqio pages
+    @page = 0
+
+    # Set page_with_ordres to ended the job if orders page is blank
+    @page_with_orders = []
+
     begin
-      Baqio::BaqioIntegration.fetch_orders.execute do |c|
+      Baqio::BaqioIntegration.fetch_orders(@page +=1).execute do |c|
         c.success do |list|
           orders = []
+          @page_with_orders = list
+          puts list.inspect.green
           list.map do |order|
             # Create or Find existing Entity / customer at Samsys
             # order[:customer][:id]
@@ -38,9 +46,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                 order[:customer][:billing_information][:zip]
               )
 
+              zip_city = build_address_cz(
+                order[:customer][:billing_information][:city], 
+                order[:customer][:billing_information][:zip]
+              )
+
               entity_addresses = Array.new([
                 { mobile: order[:customer][:billing_information][:mobile] },
-                { mail: baqio_custumer_address },
+                { mail: " ", zip_city: zip_city },
                 { email: order[:customer][:billing_information][:email] },
                 { website: order[:customer][:billing_information][:website] }
               ])
@@ -48,11 +61,19 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               # Create EntityAddress for every valid entity_addresses got from Baqio
               entity_addresses.each do |entity_address|
                 unless entity_address.values.first.blank?
-                  EntityAddress.create!(
-                    entity_id: entity.id,
-                    canal: entity_address.keys.first.to_s,
-                    coordinate: entity_address.values.first
-                  )
+                  if entity_address.keys.first == :mail 
+                    EntityAddress.create!(
+                      entity_id: entity.id,
+                      canal: entity_address.keys.first.to_s,
+                      mail_line_6: entity_address[:zip_city]
+                    )
+                  else
+                    EntityAddress.create!(
+                      entity_id: entity.id,
+                      canal: entity_address.keys.first.to_s,
+                      coordinate: entity_address.values.first
+                    )
+                  end
                 end
               end
             end
@@ -63,12 +84,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         end
       end
-
+    
     rescue StandardError => error
       Rails.logger.error $!
       Rails.logger.error $!.backtrace.join("\n")
       ExceptionNotifier.notify_exception($!, data: { message: error })
-    end
+    end while @page_with_orders.blank? == false
   end
 
   private
@@ -81,6 +102,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     build_z = zip.nil? ? "" : zip
 
     "#{build_a}#{build_c}#{build_z}"
+  end
+
+  def build_address_cz(city, zip)
+    return nil if city.blank? && zip.blank?
+    build_c = city.nil? ? "" : city + ", "
+    build_z = zip.nil? ? "" : zip
+
+    "#{build_c}#{build_z}"
   end
 
   def error_notification_params(error)

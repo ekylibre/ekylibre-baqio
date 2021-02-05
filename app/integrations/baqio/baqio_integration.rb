@@ -50,9 +50,9 @@ module Baqio
       end
     end
 
-    def fetch_orders
+    def fetch_orders(page)
       # Call API
-      get_json(ORDERS_URL, authentication_header) do |r|
+      get_json(ORDERS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do
           list = JSON(r.body).map{|p| p.deep_symbolize_keys}
         end
