@@ -22,6 +22,7 @@ module Baqio
     FAMILY_URL = BASE_URL + "/product_families"
     ORDERS_URL = BASE_URL + "/orders"
     CUSTOMER_URL = BASE_URL + "/customers"
+    VARIANTS_URL = BASE_URL + "/product_variants"
 
     authenticate_with :check do
       parameter :api_key
@@ -29,7 +30,7 @@ module Baqio
       parameter :api_secret
     end
 
-    calls :authentication_header, :fetch_family_product, :fetch_orders, :fetch_custumer
+    calls :authentication_header, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants
 
     # Build authentication header with api_key and password parameters
     #DOC https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json
@@ -61,6 +62,14 @@ module Baqio
 
     def fetch_custumer(customer_id)
       get_json(ORDERS_URL + "/#{customer_id}", authentication_header) do |r|
+        r.success do
+          list = JSON(r.body)
+        end
+      end
+    end
+
+    def fetch_product_variants(product_variant_id)
+      get_json(VARIANTS_URL + "/#{product_variant_id}", authentication_header) do |r|
         r.success do
           list = JSON(r.body)
         end

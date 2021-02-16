@@ -10,9 +10,64 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     @page_with_orders = []
 
     begin
-      Baqio::BaqioIntegration.fetch_orders(@page +=1).execute do |c|
+
+      # Create ProductNatureCategory and ProductNature from Baqio product_families
+      Baqio::BaqioIntegration.fetch_family_product.execute do |c|
         c.success do |list|
-          orders = []
+          list.map do |family_product|
+            pnc = ProductNatureCategory.find_by(reference_name: "wine") || ProductNatureCategory.import_from_nomenclature("wine")
+
+            pncs = ProductNatureCategory.where("provider ->> 'id' = ?", family_product[:id].to_s)
+            if pncs.any?
+              pncs.first
+            else
+              new_pnc = ProductNatureCategory.create!(
+                name: family_product[:name],
+                pictogram: pnc.pictogram,
+                active: pnc.active,
+                depreciable: pnc.depreciable,
+                saleable: pnc.saleable,
+                purchasable: pnc.purchasable,
+                storable: pnc.storable,
+                reductible: pnc.reductible,
+                subscribing: pnc.subscribing,
+                product_account_id: pnc.product_account_id,
+                stock_account_id: pnc.stock_account_id,
+                fixed_asset_depreciation_percentage: pnc.fixed_asset_depreciation_percentage,
+                fixed_asset_depreciation_method: pnc.fixed_asset_depreciation_method, 
+                stock_movement_account_id: pnc.stock_movement_account_id,
+                type: pnc.type,
+                provider: {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
+              )
+            end
+
+            pn = ProductNature.find_by(reference_name: "wine") || ProductNature.import_from_nomenclature("wine")
+
+            pns = ProductNature.where("provider ->> 'id' = ?", family_product[:id].to_s)
+            if pns.any?
+              pns.first
+            else
+              new_pn = ProductNature.create!(
+                name: family_product[:name],
+                variety: pn.variety,
+                derivative_of: pn.derivative_of,
+                reference_name: pn.reference_name,
+                active: pn.active,
+                evolvable: pn.evolvable,
+                population_counting: pn.population_counting,
+                variable_indicators_list: [:certification, :reference_year, :temperature],
+                frozen_indicators_list: pn.frozen_indicators_list,
+                type: pn.type,
+                provider: {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
+              )
+            end
+          end
+        end
+      end
+
+      # Create sales from baqio order's @page +=1)
+      Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
+        c.success do |list|
           @page_with_orders = list
           puts list.inspect.green
           list.map do |order|
@@ -20,7 +75,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             # order[:customer][:id]
             # order[:customer][:name]
             # order[:customer][:email]
-            # order[:customer][:]
             entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
             if entities.any?
               entity = entities.first
@@ -72,8 +126,60 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             end
 
             # Create or Find Sale
+            # order[:amount] = amount
+            # order[:fulfillment_status] = status
+            # order[:id] = provider id
+            # order[:order_lines_not_deleted] = items
+            sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
+            if sales.any?
+              sale = sales.first
+            else
+              if order[:id] == 133607
+                # Create Variants from Baqio order_lines
+
+                order[:order_lines_not_deleted].each do |product_order|
+
+                  product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:id].to_s)
+                  binding.pry
+
+                  if product_nature_variants.any?
+                    binding.pry
+                    product_nature_variant = product_nature_variants.first
+                  else
+                    # Find Baqio product_family_id
+                    Baqio::BaqioIntegration.fetch_product_variants(product_order[:product_variant_id]).execute do |c|
+                      c.success do |order|
+                        @product_nature_and_category_id = order["product"]["product_family_id"].to_s
+                      end
+                    end
+
+                    product_nature = ProductNature.find_by("provider ->> 'id' = ?", @product_nature_and_category_id)
+                    product_nature_category = ProductNatureCategory.find_by("provider ->> 'id' = ?", @product_nature_and_category_id)
+
+                    binding.pry
+                    # Find or create new variant
+                    product_nature_variant =  ProductNatureVariant.create!(
+                      category_id: product_nature_category.id,
+                      nature_id: product_nature.id,
+                      name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+                      unit_name: "Unité",
+                      provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:id]}
+                    )
+                  end
+
+
+                end
+
+
+                binding.pry
+                # sale = Sale.create!(
+                #   client_id: entity.id,
+                #   provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]}
+                # )
+              end
+            end
+
           end
-          puts orders.first.inspect.red
 
         end
       end
@@ -82,7 +188,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       Rails.logger.error $!
       Rails.logger.error $!.backtrace.join("\n")
       ExceptionNotifier.notify_exception($!, data: { message: error })
-    end while @page_with_orders.blank? == false || @page == 50
+    end #while @page_with_orders.blank? == false || @page == 50
   end
 
   private
