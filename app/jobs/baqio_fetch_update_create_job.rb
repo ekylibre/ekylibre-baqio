@@ -137,13 +137,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               if order[:id] == 133607
                 # Create Variants from Baqio order_lines
 
+                binding.pry
+                sale = Sale.create!(
+                  client_id: entity.id,
+                  provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]}
+                )
+
                 order[:order_lines_not_deleted].each do |product_order|
 
                   product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:id].to_s)
-                  binding.pry
 
                   if product_nature_variants.any?
-                    binding.pry
                     product_nature_variant = product_nature_variants.first
                   else
                     # Find Baqio product_family_id
@@ -165,6 +169,19 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                       unit_name: "Unité",
                       provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:id]}
                     )
+
+                    binding.pry
+
+                    sale_item = SaleItem.create!(
+                      sale_id: sale.id,
+                      variant_id: product_nature_variant.id,
+                      label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+                      currency: product_order[:price_currency],
+                      amount: product_order[:quantity].to_i,
+                      unit_amount: product_order[:price_cents],
+                      pretax_amount: product_order[:total_price_with_tax_cents],
+                      unit_pretax_amount: product_order[:total_price_with_tax_cents] / product_order[:quantity].to_i
+                    )
                   end
 
 
@@ -180,7 +197,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             end
 
           end
-
         end
       end
     
