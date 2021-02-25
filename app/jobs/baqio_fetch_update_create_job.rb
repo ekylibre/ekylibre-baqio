@@ -31,6 +31,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     { value: 17, category: "Matière première pour spiritueux" }
   ].freeze
 
+  CATEGORY = "wine"
+
   def perform
     # Page need to be set-up to fetch orders from different Baqio pages
     @page = 0
@@ -38,211 +40,21 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     # Set page_with_ordres to ended the job if orders page is blank
     @page_with_orders = []
 
+    @init_category = ProductNatureCategory.find_by(reference_name: CATEGORY) || ProductNatureCategory.import_from_nomenclature(CATEGORY)
+
+    @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_nomenclature(CATEGORY)
+
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
-      Baqio::BaqioIntegration.fetch_family_product.execute do |c|
-        c.success do |list|
-          list.map do |family_product|
-            pnc = ProductNatureCategory.find_by(reference_name: "wine") || ProductNatureCategory.import_from_nomenclature("wine")
-
-            pncs = ProductNatureCategory.where("provider ->> 'id' = ?", family_product[:id].to_s)
-            if pncs.any?
-              pncs.first
-            else
-              new_pnc = ProductNatureCategory.create!(
-                name: family_product[:name],
-                pictogram: pnc.pictogram,
-                active: pnc.active,
-                depreciable: pnc.depreciable,
-                saleable: pnc.saleable,
-                purchasable: pnc.purchasable,
-                storable: pnc.storable,
-                reductible: pnc.reductible,
-                subscribing: pnc.subscribing,
-                product_account_id: pnc.product_account_id,
-                stock_account_id: pnc.stock_account_id,
-                fixed_asset_depreciation_percentage: pnc.fixed_asset_depreciation_percentage,
-                fixed_asset_depreciation_method: pnc.fixed_asset_depreciation_method, 
-                stock_movement_account_id: pnc.stock_movement_account_id,
-                type: pnc.type,
-                provider: {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
-              )
-            end
-
-            # pn = ProductNature.find_by(reference_name: "wine") || ProductNature.import_from_nomenclature("wine")
-
-            # pns = ProductNature.where("provider ->> 'id' = ?", family_product[:id].to_s)
-            # if pns.any?
-            #   pns.first
-            # else
-            #   new_pn = ProductNature.create!(
-            #     name: family_product[:name],
-            #     variety: pn.variety,
-            #     derivative_of: pn.derivative_of,
-            #     reference_name: pn.reference_name,
-            #     active: pn.active,
-            #     evolvable: pn.evolvable,
-            #     population_counting: pn.population_counting,
-            #     variable_indicators_list: [:certification, :reference_year, :temperature],
-            #     frozen_indicators_list: pn.frozen_indicators_list,
-            #     type: pn.type,
-            #     provider: {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
-            #   )
-            # end
-          end
-        end
-      end
+      create_or_find_product_nature_categories
 
       # Create sales from baqio order's @page +=1)
       Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
         c.success do |list|
           @page_with_orders = list
-          puts list.inspect.green
           list.map do |order|
-            # Create or Find existing Entity / customer at Samsys
-            # order[:customer][:id]
-            # order[:customer][:name]
-            # order[:customer][:email]
-            entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
-            if entities.any?
-              entity = entities.first
-            else
-              custom_name = if order[:customer][:billing_information][:last_name].nil? 
-                              order[:customer][:billing_information][:company_name] 
-                            else
-                              order[:customer][:billing_information][:last_name]
-                            end
-              # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
-              # Need API update from Baqio, method customer/id doesn't work
-              entity = Entity.create!(
-                first_name: order[:customer][:billing_information][:first_name],
-                last_name: custom_name,
-                provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
-              )
-
-              zip_city = build_address_cz(
-                order[:customer][:billing_information][:city],
-                order[:customer][:billing_information][:zip]
-              )
-
-              entity_addresses = Array.new([
-                { mobile: order[:customer][:billing_information][:mobile] },
-                { zip_city: zip_city , mail: order[:customer][:billing_information][:address1]},
-                { email: order[:customer][:billing_information][:email] },
-                { website: order[:customer][:billing_information][:website] }
-              ])
-
-              # Create EntityAddress for every valid entity_addresses got from Baqio
-              entity_addresses.each do |entity_address|
-                unless entity_address.values.first.blank?
-                  if entity_address.keys.last == :mail 
-                    EntityAddress.create!(
-                      entity_id: entity.id,
-                      canal: "mail",
-                      mail_line_4: entity_address[:mail],
-                      mail_line_6: entity_address[:zip_city]
-                    )
-                  else
-                    EntityAddress.create!(
-                      entity_id: entity.id,
-                      canal: entity_address.keys.first.to_s,
-                      coordinate: entity_address.values.first
-                    )
-                  end
-                end
-              end
-            end
-
-            # Create or Find Sale
-            sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
-            if sales.any?
-              sale = sales.first
-            else
-              if order[:id] == 133607 # || order[:id] == 133605
-                # Create Variants from Baqio order_lines
-                invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
-                confirmed_date = order[:state] == "validated" ? order[:date] : nil
-
-                sale = Sale.create!(
-                  client_id: entity.id,
-                  provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]},
-                  invoiced_at: invoiced_date,
-                  confirmed_at: confirmed_date
-                )
-
-                sale.update!(state: sale_state_matching(order[:state]))
-                sale.affair.refresh!
-
-                # Find Tax Lines
-                @tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
-
-                # Create SaleItem
-                order[:order_lines_not_deleted].each do |product_order|
-
-                  product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:id].to_s)
-
-                  binding.pry
-                  if product_nature_variants.any?
-                    product_nature_variant = product_nature_variants.first
-                  else
-                    binding.pry
-
-                    # Find Baqio product_family_id and product_category_id
-                    Baqio::BaqioIntegration.fetch_product_variants(product_order[:product_variant_id]).execute do |c|
-                      c.success do |order|
-                        @product_category_id = order["product"]["product_family_id"].to_s
-                        @product_nature_id = order["product"]["product_category_id"].to_s
-                      end
-                    end
-
-                    # Find or Create ProductNature from Baqio Product Type
-                    pns = ProductNature.where("provider ->> 'id' = ?", @product_nature_id)
-                    if pns.any?
-                      product_nature = pns.first
-                    else
-                      pn = ProductNature.find_by(reference_name: "wine") || ProductNature.import_from_nomenclature("wine")
-
-                      product_nature = ProductNature.create!(
-                        name: product_category_baqio_matching(@product_nature_id.to_i),
-                        variety: pn.variety,
-                        derivative_of: pn.derivative_of,
-                        reference_name: pn.reference_name,
-                        active: pn.active,
-                        evolvable: pn.evolvable,
-                        population_counting: pn.population_counting,
-                        variable_indicators_list: [:certification, :reference_year, :temperature],
-                        frozen_indicators_list: pn.frozen_indicators_list,
-                        type: pn.type,
-                        provider: {vendor: "Baqio", name: "Baqio_product_type", id: @product_nature_id}
-                      )
-                    end
-
-                    product_nature_category = ProductNatureCategory.find_by("provider ->> 'id' = ?", @product_category_id)
-
-                    # Find or create new variant
-                    product_nature_variant =  ProductNatureVariant.create!(
-                      category_id: product_nature_category.id,
-                      nature_id: product_nature.id,
-                      name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
-                      unit_name: "Unité",
-                      provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:id]}
-                    )
-
-                    sale_item = SaleItem.create!(
-                      sale_id: sale.id,
-                      variant_id: product_nature_variant.id,
-                      label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
-                      currency: product_order[:price_currency],
-                      quantity: product_order[:quantity].to_d,
-                      unit_pretax_amount: (product_order[:price_cents] / 100.0).to_d,
-                      tax_id: @tax_order.id
-                    )
-                  end
-                end
-
-              end
-            end
-
+            create_or_find_entities(order)
+            create_or_find_sales(order, @entity)
           end
         end
       end
@@ -255,6 +67,187 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   private
+
+  def create_or_find_product_nature_categories
+    Baqio::BaqioIntegration.fetch_family_product.execute do |c|
+      c.success do |list|
+        list.map do |family_product|
+
+          product_nature_categories = ProductNatureCategory.where("provider ->> 'id' = ?", family_product[:id].to_s)
+          if product_nature_categories.any?
+            product_nature_categories.first
+          else
+            product_nature_category = ProductNatureCategory.find_or_initialize_by(name: family_product[:name])
+
+              product_nature_category.pictogram = @init_category.pictogram
+              product_nature_category.active = family_product[:displayed]
+              product_nature_category.depreciable = @init_category.depreciable
+              product_nature_category.saleable = @init_category.saleable
+              product_nature_category.purchasable = @init_category.purchasable
+              product_nature_category.storable = @init_category.storable
+              product_nature_category.reductible = @init_category.reductible
+              product_nature_category.subscribing = @init_category.subscribing
+              product_nature_category.product_account_id = @init_category.product_account_id
+              product_nature_category.stock_account_id = @init_category.stock_account_id
+              product_nature_category.fixed_asset_depreciation_percentage = @init_category.fixed_asset_depreciation_percentage
+              product_nature_category.fixed_asset_depreciation_method = @init_category.fixed_asset_depreciation_method
+              product_nature_category.stock_movement_account_id = @init_category.stock_movement_account_id
+              product_nature_category.type = @init_category.type
+              product_nature_category.provider = {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
+
+            product_nature_category.save!
+          end
+        end
+      end
+    end
+  end
+
+  def create_or_find_entities(order)
+    entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
+    if entities.any?
+      @entity = entities.first
+    else
+      custom_name = if order[:customer][:billing_information][:last_name].nil? 
+                      order[:customer][:billing_information][:company_name] 
+                    else
+                      order[:customer][:billing_information][:last_name]
+                    end
+      # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
+      # Need API update from Baqio, method customer/id doesn't work
+      @entity = Entity.create!(
+        first_name: order[:customer][:billing_information][:first_name],
+        last_name: custom_name,
+        provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
+      )
+
+      zip_city = build_address_cz(
+        order[:customer][:billing_information][:city],
+        order[:customer][:billing_information][:zip]
+      )
+
+      entity_addresses = Array.new([
+        { mobile: order[:customer][:billing_information][:mobile] },
+        { zip_city: zip_city , mail: order[:customer][:billing_information][:address1]},
+        { email: order[:customer][:billing_information][:email] },
+        { website: order[:customer][:billing_information][:website] }
+      ])
+
+      # Create EntityAddress for every valid entity_addresses got from Baqio
+      entity_addresses.each do |entity_address|
+        unless entity_address.values.first.blank?
+          if entity_address.keys.last == :mail 
+            EntityAddress.create!(
+              entity_id: entity.id,
+              canal: "mail",
+              mail_line_4: entity_address[:mail],
+              mail_line_6: entity_address[:zip_city]
+            )
+          else
+            EntityAddress.create!(
+              entity_id: entity.id,
+              canal: entity_address.keys.first.to_s,
+              coordinate: entity_address.values.first
+            )
+          end
+        end
+      end
+    end
+  end
+
+  def create_or_find_sales(order, entity)
+    sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
+    if sales.any?
+      sale = sales.first
+    else
+      if order[:id] == 133607 # || order[:id] == 133605
+        # Create Variants from Baqio order_lines
+        invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
+        confirmed_date = order[:state] == "validated" ? order[:date] : nil
+
+        sale = Sale.create!(
+          client_id: entity.id,
+          provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]},
+          invoiced_at: invoiced_date,
+          confirmed_at: confirmed_date
+        )
+
+        sale.update!(state: sale_state_matching(order[:state]))
+
+        # Find Tax Lines
+        @tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
+
+        # Create SaleItem
+        order[:order_lines_not_deleted].each do |product_order|
+          variant = find_or_create_variant(product_order)
+
+          sale_item = SaleItem.create!(
+            sale_id: sale.id,
+            variant_id: variant.id,
+            label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+            currency: product_order[:price_currency],
+            quantity: product_order[:quantity].to_d,
+            unit_pretax_amount: (product_order[:price_cents] / 100.0).to_d,
+            tax_id: @tax_order.id
+          )
+        end
+
+      end
+    end
+  end
+
+  def fetch_product_family_and_category_id(product_variant_id)
+    Baqio::BaqioIntegration.fetch_product_variants(product_variant_id).execute do |c|
+      c.success do |order|
+        @product_category_id = order["product"]["product_family_id"].to_s
+        @product_nature_id = order["product"]["product_category_id"].to_s
+      end
+    end
+  end
+
+  def find_or_create_product_nature(product_nature_id)
+    pns = ProductNature.where("provider ->> 'id' = ?", product_nature_id)
+    if pns.any?
+      product_nature = pns.first
+    else
+      product_nature = ProductNature.find_or_initialize_by(name: product_category_baqio_matching(product_nature_id.to_i))
+
+      product_nature.variety = @init_product_nature.variety
+      product_nature.derivative_of = @init_product_nature.derivative_of
+      product_nature.reference_name = @init_product_nature.reference_name
+      product_nature.active = @init_product_nature.active
+      product_nature.evolvable = @init_product_nature.evolvable
+      product_nature.population_counting = @init_product_nature.population_counting
+      product_nature.variable_indicators_list = [:certification, :reference_year, :temperature]
+      product_nature.frozen_indicators_list = @init_product_nature.frozen_indicators_list
+      product_nature.type = @init_product_nature.type
+      product_nature.provider = {vendor: "Baqio", name: "Baqio_product_type", id: product_nature_id}
+      product_nature.save!
+
+      product_nature
+    end
+  end
+
+  def find_or_create_variant(product_order)
+    product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:id].to_s)
+
+    if product_nature_variants.any?
+      product_nature_variant = product_nature_variants.first
+    else
+      # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
+      fetch_product_family_and_category_id(product_order[:product_variant_id])
+      product_nature = find_or_create_product_nature(@product_nature_id)
+      product_nature_category = ProductNatureCategory.find_by("provider ->> 'id' = ?", @product_category_id)
+
+      # Find or create new variant
+      product_nature_variant =  ProductNatureVariant.create!(
+        category_id: product_nature_category.id,
+        nature_id: product_nature.id,
+        name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+        unit_name: "Unité",
+        provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:id]}
+      )
+    end
+  end
 
   def product_category_baqio_matching(category_id)
     PRODUCT_CATEGORY_BAQIO.find {|h| h[:value] == category_id}[:category]
