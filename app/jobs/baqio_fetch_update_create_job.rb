@@ -160,7 +160,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sale = sales.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 # || order[:id] == 133605
+      if order[:id] == 133607 #|| order[:id] == 133605 || order[:id] == 133591
         # Check and define the state's sale
         invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
         confirmed_date = order[:state] == "validated" ? order[:date] : nil
@@ -184,7 +184,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
             currency: product_order[:price_currency],
             quantity: product_order[:quantity].to_d,
-            unit_pretax_amount: (product_order[:price_cents] / 100.0).to_d,
+            pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
+            compute_from: "pretax_amount",
             tax_id: tax_order.id
           )
         end
@@ -230,7 +231,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def find_or_create_variant(product_order)
-    product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:id].to_s)
+    product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:product_variant_id].to_s)
 
     if product_nature_variants.any?
       product_nature_variant = product_nature_variants.first
@@ -246,8 +247,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         nature_id: product_nature.id,
         name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
         unit_name: "Unité",
-        provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:id]}
-      )
+        provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:product_variant_id]}      )
     end
   end
 
