@@ -46,15 +46,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
-      create_or_find_product_nature_categories
+      find_or_create_product_nature_category
 
       # Create sales from baqio order's @page +=1)
       Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
         c.success do |list|
           @page_with_orders = list
           list.map do |order|
-            create_or_find_entities(order)
-            create_or_find_sales(order, @entity)
+            entity = find_or_create_entity(order)
+            find_or_create_sale(order, entity)
           end
         end
       end
@@ -68,7 +68,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   private
 
-  def create_or_find_product_nature_categories
+  def find_or_create_product_nature_category
     Baqio::BaqioIntegration.fetch_family_product.execute do |c|
       c.success do |list|
         list.map do |family_product|
@@ -79,21 +79,21 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           else
             product_nature_category = ProductNatureCategory.find_or_initialize_by(name: family_product[:name])
 
-              product_nature_category.pictogram = @init_category.pictogram
-              product_nature_category.active = family_product[:displayed]
-              product_nature_category.depreciable = @init_category.depreciable
-              product_nature_category.saleable = @init_category.saleable
-              product_nature_category.purchasable = @init_category.purchasable
-              product_nature_category.storable = @init_category.storable
-              product_nature_category.reductible = @init_category.reductible
-              product_nature_category.subscribing = @init_category.subscribing
-              product_nature_category.product_account_id = @init_category.product_account_id
-              product_nature_category.stock_account_id = @init_category.stock_account_id
-              product_nature_category.fixed_asset_depreciation_percentage = @init_category.fixed_asset_depreciation_percentage
-              product_nature_category.fixed_asset_depreciation_method = @init_category.fixed_asset_depreciation_method
-              product_nature_category.stock_movement_account_id = @init_category.stock_movement_account_id
-              product_nature_category.type = @init_category.type
-              product_nature_category.provider = {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
+            product_nature_category.pictogram = @init_category.pictogram
+            product_nature_category.active = family_product[:displayed]
+            product_nature_category.depreciable = @init_category.depreciable
+            product_nature_category.saleable = @init_category.saleable
+            product_nature_category.purchasable = @init_category.purchasable
+            product_nature_category.storable = @init_category.storable
+            product_nature_category.reductible = @init_category.reductible
+            product_nature_category.subscribing = @init_category.subscribing
+            product_nature_category.product_account_id = @init_category.product_account_id
+            product_nature_category.stock_account_id = @init_category.stock_account_id
+            product_nature_category.fixed_asset_depreciation_percentage = @init_category.fixed_asset_depreciation_percentage
+            product_nature_category.fixed_asset_depreciation_method = @init_category.fixed_asset_depreciation_method
+            product_nature_category.stock_movement_account_id = @init_category.stock_movement_account_id
+            product_nature_category.type = @init_category.type
+            product_nature_category.provider = {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
 
             product_nature_category.save!
           end
@@ -102,10 +102,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def create_or_find_entities(order)
+  def find_or_create_entity(order)
     entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
     if entities.any?
-      @entity = entities.first
+      entity = entities.first
     else
       custom_name = if order[:customer][:billing_information][:last_name].nil? 
                       order[:customer][:billing_information][:company_name] 
@@ -114,7 +114,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                     end
       # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
       # Need API update from Baqio, method customer/id doesn't work
-      @entity = Entity.create!(
+      entity = Entity.create!(
         first_name: order[:customer][:billing_information][:first_name],
         last_name: custom_name,
         provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
@@ -154,43 +154,45 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def create_or_find_sales(order, entity)
+  def find_or_create_sale(order, entity)
     sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
     if sales.any?
       sale = sales.first
     else
+      # TO REMOVE later / Create only 2 orders for testing
       if order[:id] == 133607 # || order[:id] == 133605
-        # Create Variants from Baqio order_lines
+        # Check and define the state's sale
         invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
         confirmed_date = order[:state] == "validated" ? order[:date] : nil
 
-        sale = Sale.create!(
+        sale = Sale.new(
           client_id: entity.id,
           provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]},
           invoiced_at: invoiced_date,
           confirmed_at: confirmed_date
         )
 
-        sale.update!(state: sale_state_matching(order[:state]))
-
-        # Find Tax Lines
-        @tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
+        tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
 
         # Create SaleItem
         order[:order_lines_not_deleted].each do |product_order|
           variant = find_or_create_variant(product_order)
 
-          sale_item = SaleItem.create!(
+          sale.items.build(
             sale_id: sale.id,
             variant_id: variant.id,
             label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
             currency: product_order[:price_currency],
             quantity: product_order[:quantity].to_d,
             unit_pretax_amount: (product_order[:price_cents] / 100.0).to_d,
-            tax_id: @tax_order.id
+            tax_id: tax_order.id
           )
         end
 
+        sale.save!
+        sale.update!(state: sale_state_matching(order[:state]))
+
+        sale
       end
     end
   end
