@@ -11,5 +11,9 @@ module EkylibreBaqio
     initializer :ekylibre_baqio_restfully_manageable do |app|
       app.config.x.restfully_manageable.view_paths << EkylibreBaqio::Engine.root.join('app', 'views')
     end
+
+    initializer :ekylibre_baqio_beehive do |app|
+      app.config.x.beehive.cell_controller_types << :last_sales_baqio
+    end
   end
 end

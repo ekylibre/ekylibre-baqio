@@ -2,34 +2,21 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   queue_as :default
   include Rails.application.routes.url_helpers
 
-  SALE_STATE = [
-    { order_state: "draft", sale_state: :draft},
-    { order_state: "pending", sale_state: :estimate},
-    { order_state: "validated", sale_state: :order},
-    { order_state: "removed", sale_state: :aborted},
-    { order_state: "invoiced", sale_state: :invoice},
-    { order_state: "cancelled", sale_state: :refused}
-  ].freeze
+  SALE_STATE = {
+    "draft" => :draft, "pending" => :estimate,
+    "validated" => :order, "removed" => :aborted,
+    "invoiced" => :invoice, "cancelled" => :refused
+  }.freeze
 
-  PRODUCT_CATEGORY_BAQIO = [
-    { value: 1, category: "Vin tranquille" },
-    { value: 2, category: "Vin mousseux" },
-    { value: 3, category: "Cidre" },
-    { value: 4, category: "VDN et VDL AOP" },
-    { value: 5, category: "Bière" },
-    { value: 6, category: "Boisson fermentée autre que le vin et la bière" },
-    { value: 7, category: "Rhum des DOM" },
-    { value: 8, category: "Autre produit intermédiaire que VDN et VDL AOP" },
-    { value: 9, category: "Autre" },
-    { value: 10, category: "Pétillant de raisin" },
-    { value: 11, category: "Poiré" },
-    { value: 12, category: "Hydromel" },
-    { value: 13, category: "Alcool (autre que Rhum)" },
-    { value: 14, category: "Pétillant de raisin" },
-    { value: 15, category: "Rhums tiers (hors DOM) et autres rhums" },
-    { value: 16, category: "Matière première pour alcool non alimentaire" },
-    { value: 17, category: "Matière première pour spiritueux" }
-  ].freeze
+  PRODUCT_CATEGORY_BAQIO = {
+    1 => "Vin tranquille", 2 => "Vin mousseux", 3 => "Cidre",
+    4 => "VDN et VDL AOP", 5 => "Bière", 6 => "Boisson fermentée autre que le vin et la bière",
+    7 => "Rhum des DOM", 8 => "Autre produit intermédiaire que VDN et VDL AOP", 9 => "Autre",
+    10 => "Pétillant de raisin", 11 => "Poiré", 12 => "Hydromel",
+    13 => "Alcool (autre que Rhum)", 14 => "Pétillant de raisin",
+    15  => "Rhums tiers (hors DOM) et autres rhums", 16  => "Matière première pour alcool non alimentaire",
+    17  => "Matière première pour spiritueux"
+  }.freeze
 
   CATEGORY = "wine"
 
@@ -191,7 +178,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         end
 
         sale.save!
-        sale.update!(state: sale_state_matching(order[:state]))
+        sale.update!(state: SALE_STATE[order[:state]])
 
         sale
       end
@@ -212,7 +199,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if pns.any?
       product_nature = pns.first
     else
-      product_nature = ProductNature.find_or_initialize_by(name: product_category_baqio_matching(product_nature_id.to_i))
+      product_nature = ProductNature.find_or_initialize_by(name: PRODUCT_CATEGORY_BAQIO[product_nature_id.to_i])
 
       product_nature.variety = @init_product_nature.variety
       product_nature.derivative_of = @init_product_nature.derivative_of
@@ -249,14 +236,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         unit_name: "Unité",
         provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:product_variant_id]}      )
     end
-  end
-
-  def product_category_baqio_matching(category_id)
-    PRODUCT_CATEGORY_BAQIO.find {|h| h[:value] == category_id}[:category]
-  end
-
-  def sale_state_matching(order_state)
-    SALE_STATE.find {|h| h[:order_state] == order_state}[:sale_state]
   end
 
   def build_address_cz(city, zip)
