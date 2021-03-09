@@ -145,6 +145,21 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
     if sales.any?
       sale = sales.first
+
+      binding.pry
+      if order[:payment_status] == "paid"
+        incoming_payment = IncomingPayment.create!(
+          journal_entry_id: sale.journal_entry.id,
+          affair_id: sale.affair.id,
+          amount: sale.amount,
+          currency: sale.currency,
+          mode_id: 2,
+          payer: sale.client
+        )
+      end
+
+
+      # Carte Bancaire, Espèces, Chèque, Virement Bancaire => credit_card, cash, check, transfer order[:payment_links].first[:payment][:payment_source][:handle]
     else
       # TO REMOVE later / Create only 2 orders for testing
       if order[:id] == 133607 #|| order[:id] == 133605 || order[:id] == 133591
