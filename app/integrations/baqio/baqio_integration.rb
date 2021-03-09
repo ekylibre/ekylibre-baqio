@@ -51,6 +51,7 @@ module Baqio
       end
     end
 
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1orders/get
     def fetch_orders(page)
       # Call API
       get_json(ORDERS_URL + "?page=#{page}", authentication_header) do |r|
@@ -75,6 +76,9 @@ module Baqio
         end
       end
     end
+
+    # TODO fetch_incoming_payment_modes
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
 
     # Check if the API is up
     def check(integration = nil)

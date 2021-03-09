@@ -1,12 +1,16 @@
+# frozen_string_literal: true
+
 class BaqioFetchUpdateCreateJob < ActiveJob::Base
   queue_as :default
   include Rails.application.routes.url_helpers
+
+  VENDOR = 'baqio'
 
   SALE_STATE = {
     "draft" => :draft, "pending" => :estimate,
     "validated" => :order, "removed" => :aborted,
     "invoiced" => :invoice, "cancelled" => :refused
-  }.freeze
+  }
 
   PRODUCT_CATEGORY_BAQIO = {
     1 => "Vin tranquille", 2 => "Vin mousseux", 3 => "Cidre",
@@ -16,7 +20,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     13 => "Alcool (autre que Rhum)", 14 => "Pétillant de raisin",
     15  => "Rhums tiers (hors DOM) et autres rhums", 16  => "Matière première pour alcool non alimentaire",
     17  => "Matière première pour spiritueux"
-  }.freeze
+  }
 
   CATEGORY = "wine"
 
@@ -35,6 +39,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       # Create ProductNatureCategory and ProductNature from Baqio product_families
       find_or_create_product_nature_category
 
+      # TODO call create or update cashes from baqio api
+
+      # TODO create or update incoming_payment_mode from baqio api
+
       # Create sales from baqio order's @page +=1)
       Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
         c.success do |list|
@@ -45,7 +53,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           end
         end
       end
-    
+
     rescue StandardError => error
       Rails.logger.error $!
       Rails.logger.error $!.backtrace.join("\n")
@@ -60,7 +68,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       c.success do |list|
         list.map do |family_product|
 
-          product_nature_categories = ProductNatureCategory.where("provider ->> 'id' = ?", family_product[:id].to_s)
+          product_nature_categories = ProductNatureCategory.of_provider_vendor(VENDOR).of_provider_data(:id, family_product[:id].to_s)
+
           if product_nature_categories.any?
             product_nature_categories.first
           else
@@ -80,7 +89,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             product_nature_category.fixed_asset_depreciation_method = @init_category.fixed_asset_depreciation_method
             product_nature_category.stock_movement_account_id = @init_category.stock_movement_account_id
             product_nature_category.type = @init_category.type
-            product_nature_category.provider = {vendor: "Baqio", name: "Baqio_product_family", id: family_product[:id]}
+            product_nature_category.provider = { vendor: VENDOR, name: "Baqio_product_family", data: {id: family_product[:id].to_s} }
 
             product_nature_category.save!
           end
@@ -90,12 +99,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def find_or_create_entity(order)
-    entities = Entity.where("provider ->> 'id' = ?", order[:customer][:id].to_s)
+    entities = Entity.of_provider_vendor(VENDOR).of_provider_data(:id, order[:customer][:id].to_s)
     if entities.any?
       entity = entities.first
     else
-      custom_name = if order[:customer][:billing_information][:last_name].nil? 
-                      order[:customer][:billing_information][:company_name] 
+      custom_name = if order[:customer][:billing_information][:last_name].nil?
+                      order[:customer][:billing_information][:company_name]
                     else
                       order[:customer][:billing_information][:last_name]
                     end
@@ -104,7 +113,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = Entity.create!(
         first_name: order[:customer][:billing_information][:first_name],
         last_name: custom_name,
-        provider: {vendor: "Baqio", name: "Baqio_order_customer", id: order[:customer][:id]}
+        provider: {
+                   vendor: VENDOR,
+                   name: "Baqio_order_customer",
+                   data: { id: order[:customer][:id].to_s }
+                  }
       )
 
       zip_city = build_address_cz(
@@ -122,7 +135,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       # Create EntityAddress for every valid entity_addresses got from Baqio
       entity_addresses.each do |entity_address|
         unless entity_address.values.first.blank?
-          if entity_address.keys.last == :mail 
+          if entity_address.keys.last == :mail
             EntityAddress.create!(
               entity_id: entity.id,
               canal: "mail",
@@ -142,12 +155,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def find_or_create_sale(order, entity)
-    sales = Sale.where("provider ->> 'id' = ?", order[:id].to_s)
+    sales = Sale.of_provider_vendor(VENDOR).of_provider_data(:id, order[:id].to_s)
     if sales.any?
       sale = sales.first
 
       binding.pry
       if order[:payment_status] == "paid"
+        # TODO check_or_create_incoming_payment
         incoming_payment = IncomingPayment.create!(
           journal_entry_id: sale.journal_entry.id,
           affair_id: sale.affair.id,
@@ -169,7 +183,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         sale = Sale.new(
           client_id: entity.id,
-          provider: {vendor: "Baqio", name: "Baqio_order", id: order[:id]},
+          reference_number: nil, # TODO add invoice number from Baqio
+          provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s} },
           invoiced_at: invoiced_date,
           confirmed_at: confirmed_date
         )
@@ -193,7 +208,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         end
 
         sale.save!
+
+        # TODO update status of sale from baqio status
         sale.update!(state: SALE_STATE[order[:state]])
+        sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+
+        # TODO link baqio pdf to sale
+        attach_pdf_to_sale(sale, order[:invoice_debit][:file][:url].to_s)
 
         sale
       end
@@ -210,7 +231,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def find_or_create_product_nature(product_nature_id)
-    pns = ProductNature.where("provider ->> 'id' = ?", product_nature_id)
+    pns = ProductNature.of_provider_vendor(VENDOR).of_provider_data(:id, product_nature_id.to_s)
+
     if pns.any?
       product_nature = pns.first
     else
@@ -225,7 +247,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       product_nature.variable_indicators_list = [:certification, :reference_year, :temperature]
       product_nature.frozen_indicators_list = @init_product_nature.frozen_indicators_list
       product_nature.type = @init_product_nature.type
-      product_nature.provider = {vendor: "Baqio", name: "Baqio_product_type", id: product_nature_id}
+      product_nature.provider = { vendor: VENDOR, name: "Baqio_product_type", data: {id: product_nature_id.to_s} }
       product_nature.save!
 
       product_nature
@@ -233,7 +255,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def find_or_create_variant(product_order)
-    product_nature_variants = ProductNatureVariant.where("provider ->> 'id' = ?", product_order[:product_variant_id].to_s)
+    product_nature_variants = ProductNatureVariant.of_provider_vendor(VENDOR).of_provider_data(:id, product_order[:product_variant_id].to_s)
 
     if product_nature_variants.any?
       product_nature_variant = product_nature_variants.first
@@ -241,7 +263,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
       fetch_product_family_and_category_id(product_order[:product_variant_id])
       product_nature = find_or_create_product_nature(@product_nature_id)
-      product_nature_category = ProductNatureCategory.find_by("provider ->> 'id' = ?", @product_category_id)
+      product_nature_category = ProductNatureCategory.of_provider_vendor(VENDOR).of_provider_data(:id, @product_category_id).first
 
       # Find or create new variant
       product_nature_variant =  ProductNatureVariant.create!(
@@ -249,9 +271,19 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         nature_id: product_nature.id,
         name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
         unit_name: "Unité",
-        provider: {vendor: "Baqio", name: "Baqio_product_order", id: product_order[:product_variant_id]}      )
+        provider: { vendor: VENDOR, name: "Baqio_product_order", data: {id: product_order[:product_variant_id].to_s} }      )
     end
   end
+
+  def attach_pdf_to_sale(sale, file_url)
+    # TODO check if url return a file
+    doc = Document.new(file: File.open(file_url))
+    sale.attachments.create!(document: doc)
+  end
+
+  # TODO create or update incoming_payment_mode from baqio api
+
+  # TODO create or update cashes
 
   def build_address_cz(city, zip)
     return nil if city.blank? && zip.blank?
@@ -273,4 +305,3 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     }
   end
 end
-  
