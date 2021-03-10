@@ -222,7 +222,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
 
         # TODO link baqio pdf to sale
-        # attach_pdf_to_sale(sale, order[:invoice_debit][:file][:url].to_s)
+        attach_pdf_to_sale(sale, order[:invoice_debit][:file_url].to_s, order[:invoice_debit][:name])
 
         sale
       end
@@ -283,10 +283,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def attach_pdf_to_sale(sale, file_url)
-    # TODO check if url return a file
-    doc = Document.new(file: File.open(file_url))
-    sale.attachments.create!(document: doc)
+  def attach_pdf_to_sale(sale, file_url, invoice_name)
+    unless file_url.nil?
+      doc = Document.new(file: URI.open(file_url), name: invoice_name, file_file_name: invoice_name + ".pdf")
+      sale.attachments.create!(document: doc)
+    end
   end
 
   # TODO create or update incoming_payment_mode from baqio api
