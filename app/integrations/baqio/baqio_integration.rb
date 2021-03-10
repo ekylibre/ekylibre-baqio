@@ -23,6 +23,7 @@ module Baqio
     ORDERS_URL = BASE_URL + "/orders"
     CUSTOMER_URL = BASE_URL + "/customers"
     VARIANTS_URL = BASE_URL + "/product_variants"
+    PAYMENT_SOURCES_URL = BASE_URL + "/payment_sources"
 
     authenticate_with :check do
       parameter :api_key
@@ -30,7 +31,7 @@ module Baqio
       parameter :api_secret
     end
 
-    calls :authentication_header, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants
+    calls :authentication_header, :fetch_payment_sources, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants
 
     # Build authentication header with api_key and password parameters
     #DOC https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json
@@ -39,6 +40,16 @@ module Baqio
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
       headers = {authorization: "Basic #{auth_encode}" ,content_type: :json, accept: :json}
+    end
+    
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
+    def fetch_payment_sources
+      # Call API
+      get_json(PAYMENT_SOURCES_URL, authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).map{|p| p.deep_symbolize_keys}
+        end
+      end
     end
 
     # GET recupérer la liste des familles de produits - OK

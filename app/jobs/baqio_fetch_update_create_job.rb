@@ -103,53 +103,59 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if entities.any?
       entity = entities.first
     else
-      custom_name = if order[:customer][:billing_information][:last_name].nil?
-                      order[:customer][:billing_information][:company_name]
-                    else
-                      order[:customer][:billing_information][:last_name]
-                    end
-      # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
-      # Need API update from Baqio, method customer/id doesn't work
-      entity = Entity.create!(
-        first_name: order[:customer][:billing_information][:first_name],
-        last_name: custom_name,
-        provider: {
-                   vendor: VENDOR,
-                   name: "Baqio_order_customer",
-                   data: { id: order[:customer][:id].to_s }
-                  }
-      )
+      # TO REMOVE later / Create only 2 orders for testing
+      if order[:id] == 133607 #|| order[:id] == 133605 || order[:id] == 133591
+        binding.pry
+        custom_name = if order[:customer][:billing_information][:last_name].nil?
+                        order[:customer][:billing_information][:company_name]
+                      else
+                        order[:customer][:billing_information][:last_name]
+                      end
+        # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
+        # Need API update from Baqio, method customer/id doesn't work
+        entity = Entity.create!(
+          first_name: order[:customer][:billing_information][:first_name],
+          last_name: custom_name,
+          provider: {
+                    vendor: VENDOR,
+                    name: "Baqio_order_customer",
+                    data: { id: order[:customer][:id].to_s }
+                    }
+        )
 
-      zip_city = build_address_cz(
-        order[:customer][:billing_information][:city],
-        order[:customer][:billing_information][:zip]
-      )
+        zip_city = build_address_cz(
+          order[:customer][:billing_information][:city],
+          order[:customer][:billing_information][:zip]
+        )
 
-      entity_addresses = Array.new([
-        { mobile: order[:customer][:billing_information][:mobile] },
-        { zip_city: zip_city , mail: order[:customer][:billing_information][:address1]},
-        { email: order[:customer][:billing_information][:email] },
-        { website: order[:customer][:billing_information][:website] }
-      ])
+        entity_addresses = Array.new([
+          { mobile: order[:customer][:billing_information][:mobile] },
+          { zip_city: zip_city , mail: order[:customer][:billing_information][:address1]},
+          { email: order[:customer][:billing_information][:email] },
+          { website: order[:customer][:billing_information][:website] }
+        ])
 
-      # Create EntityAddress for every valid entity_addresses got from Baqio
-      entity_addresses.each do |entity_address|
-        unless entity_address.values.first.blank?
-          if entity_address.keys.last == :mail
-            EntityAddress.create!(
-              entity_id: entity.id,
-              canal: "mail",
-              mail_line_4: entity_address[:mail],
-              mail_line_6: entity_address[:zip_city]
-            )
-          else
-            EntityAddress.create!(
-              entity_id: entity.id,
-              canal: entity_address.keys.first.to_s,
-              coordinate: entity_address.values.first
-            )
+        # Create EntityAddress for every valid entity_addresses got from Baqio
+        entity_addresses.each do |entity_address|
+          unless entity_address.values.first.blank?
+            if entity_address.keys.last == :mail
+              EntityAddress.create!(
+                entity_id: entity.id,
+                canal: "mail",
+                mail_line_4: entity_address[:mail],
+                mail_line_6: entity_address[:zip_city]
+              )
+            else
+              EntityAddress.create!(
+                entity_id: entity.id,
+                canal: entity_address.keys.first.to_s,
+                coordinate: entity_address.values.first
+              )
+            end
           end
         end
+
+        entity
       end
     end
   end
@@ -159,18 +165,18 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if sales.any?
       sale = sales.first
 
-      binding.pry
-      if order[:payment_status] == "paid"
-        # TODO check_or_create_incoming_payment
-        incoming_payment = IncomingPayment.create!(
-          journal_entry_id: sale.journal_entry.id,
-          affair_id: sale.affair.id,
-          amount: sale.amount,
-          currency: sale.currency,
-          mode_id: 2,
-          payer: sale.client
-        )
-      end
+      # binding.pry
+      # if order[:payment_status] == "paid"
+      #   # TODO check_or_create_incoming_payment
+      #   incoming_payment = IncomingPayment.create!(
+      #     journal_entry_id: sale.journal_entry.id,
+      #     affair_id: sale.affair.id,
+      #     amount: sale.amount,
+      #     currency: sale.currency,
+      #     mode_id: 2,
+      #     payer: sale.client
+      #   )
+      # end
 
 
       # Carte Bancaire, Espèces, Chèque, Virement Bancaire => credit_card, cash, check, transfer order[:payment_links].first[:payment][:payment_source][:handle]
@@ -180,6 +186,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         # Check and define the state's sale
         invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
         confirmed_date = order[:state] == "validated" ? order[:date] : nil
+
+        binding.pry
 
         sale = Sale.new(
           client_id: entity.id,
@@ -211,10 +219,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         # TODO update status of sale from baqio status
         sale.update!(state: SALE_STATE[order[:state]])
-        sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
 
         # TODO link baqio pdf to sale
-        attach_pdf_to_sale(sale, order[:invoice_debit][:file][:url].to_s)
+        # attach_pdf_to_sale(sale, order[:invoice_debit][:file][:url].to_s)
 
         sale
       end
