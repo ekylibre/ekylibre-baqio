@@ -24,6 +24,7 @@ module Baqio
     CUSTOMER_URL = BASE_URL + "/customers"
     VARIANTS_URL = BASE_URL + "/product_variants"
     PAYMENT_SOURCES_URL = BASE_URL + "/payment_sources"
+    BANK_INFORMATIONS_URL = BASE_URL + "/bank_informations"
 
     authenticate_with :check do
       parameter :api_key
@@ -31,7 +32,7 @@ module Baqio
       parameter :api_secret
     end
 
-    calls :authentication_header, :fetch_payment_sources, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants
+    calls :authentication_header, :fetch_payment_sources, :fetch_bank_informations, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants
 
     # Build authentication header with api_key and password parameters
     #DOC https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json
@@ -46,6 +47,16 @@ module Baqio
     def fetch_payment_sources
       # Call API
       get_json(PAYMENT_SOURCES_URL, authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).map{|p| p.deep_symbolize_keys}
+        end
+      end
+    end
+
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/components/schemas/BankInformation
+    def fetch_bank_informations
+      # Call API
+      get_json(BANK_INFORMATIONS_URL, authentication_header) do |r|
         r.success do
           list = JSON(r.body).map{|p| p.deep_symbolize_keys}
         end

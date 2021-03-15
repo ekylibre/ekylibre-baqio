@@ -40,19 +40,20 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       find_or_create_product_nature_category
 
       # TODO call create or update cashes from baqio api
-
+      create_or_update_cashe
       # TODO create or update incoming_payment_mode from baqio api
+      #create_or_update_incoming_payment_mode
 
       # Create sales from baqio order's @page +=1)
-      Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
-        c.success do |list|
-          @page_with_orders = list
-          list.map do |order|
-            entity = find_or_create_entity(order)
-            find_or_create_sale(order, entity)
-          end
-        end
-      end
+      # Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
+      #   c.success do |list|
+      #     @page_with_orders = list
+      #     list.map do |order|
+      #       entity = find_or_create_entity(order)
+      #       find_or_create_sale(order, entity)
+      #     end
+      #   end
+      # end
 
     rescue StandardError => error
       Rails.logger.error $!
@@ -62,6 +63,83 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   private
+
+  # TODO create or update cashes
+  def create_or_update_cashe
+    Baqio::BaqioIntegration.fetch_bank_informations.execute do |c|
+      c.success do |list|
+        list.map do |bank_information|
+          iban = bank_information[:iban]
+          cash = Cash.where(iban: iban)
+
+          binding.pry
+          if cash.any?
+            cash
+          else
+            journal = create_journal(bank_information, list)
+            account = Account.find_by(name: "Banques")
+
+            binding.pry
+
+            cash = Cash.create!(
+              name: bank_information[:domiciliation],
+              nature: "bank_account",
+              mode: 'iban',
+              iban: bank_information[:iban],
+              journal_id: journal.id,
+              main_account_id: account.id,
+              provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+            )
+          end
+
+        end
+      end
+    end
+  end
+
+  def create_journal(bank_information, list)
+    bank_information_index = list.index(bank_information).to_s
+    journal = Journal.create!(
+      name: "Banque" + bank_information[:domiciliation],
+      code: "21B" + bank_information_index,
+      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+    )
+  end
+
+  def create_account
+    account_number_digits = Preference.find_by(name: "account_number_digits").integer_value
+
+    account = Account.create!(
+      number: ,
+      name: "Banque" + bank_information[:domiciliation],
+      label: ,
+      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+    )
+  end
+
+  # TODO create or update incoming_payment_mode from baqio api
+  def create_or_update_incoming_payment_mode
+    Baqio::BaqioIntegration.fetch_payment_sources.execute do |c|
+      c.success do |list|
+        list.map do |incoming_payment_mode|
+            incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:id].to_s)
+  
+            if incoming_payment_modes.any?
+              binding.pry
+              incoming_payment_modes.first
+            else
+              binding.pry
+              # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
+              incoming_payment_mode = IncomingPaymentMode.create!(
+                name: incoming_payment_mode[:name],
+                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s} }
+              )
+            end
+        end
+      end
+    end
+  end
+
 
   def find_or_create_product_nature_category
     Baqio::BaqioIntegration.fetch_family_product.execute do |c|
@@ -218,9 +296,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         sale.save!
 
         # TODO update status of sale from baqio status
-        sale.update!(state: SALE_STATE[order[:state]])
+        # sale.update!(state: SALE_STATE[order[:state]])
+        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
         # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
 
+        # sale.propose if sale.draft?
+        # sale.confirm(sale.invoiced_at)
+        # sale.invoice(sale.invoiced_at)
+        
         # TODO link baqio pdf to sale
         attach_pdf_to_sale(sale, order[:invoice_debit][:file_url].to_s, order[:invoice_debit][:name])
 
@@ -289,10 +373,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sale.attachments.create!(document: doc)
     end
   end
-
-  # TODO create or update incoming_payment_mode from baqio api
-
-  # TODO create or update cashes
 
   def build_address_cz(city, zip)
     return nil if city.blank? && zip.blank?
