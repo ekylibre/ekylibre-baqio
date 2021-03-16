@@ -41,19 +41,20 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
       # TODO call create or update cashes from baqio api
       create_or_update_cashe
+      
       # TODO create or update incoming_payment_mode from baqio api
       create_or_update_incoming_payment_mode
 
       # Create sales from baqio order's @page +=1)
-      # Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
-      #   c.success do |list|
-      #     @page_with_orders = list
-      #     list.map do |order|
-      #       entity = find_or_create_entity(order)
-      #       find_or_create_sale(order, entity)
-      #     end
-      #   end
-      # end
+      Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
+        c.success do |list|
+          @page_with_orders = list
+          list.map do |order|
+            entity = find_or_create_entity(order)
+            find_or_create_sale(order, entity)
+          end
+        end
+      end
 
     rescue StandardError => error
       Rails.logger.error $!
@@ -166,7 +167,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             if incoming_payment_mode[:name] == "Espèces"
               cash = create_or_find_cash_box
             else
-              
+
               if incoming_payment_mode[:bank_information_id].nil?
                 cash = Cash.of_provider_vendor(VENDOR).of_provider_data('primary', "true").first
               else
@@ -227,7 +228,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 #|| order[:id] == 133605 || order[:id] == 133591
+      if order[:id] == 133607 || order[:id] == 133591 #|| order[:id] == 133605 || order[:id] == 133591
         binding.pry
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
@@ -288,29 +289,30 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if sales.any?
       sale = sales.first
 
-      # binding.pry
-      # if order[:payment_status] == "paid"
-      #   # TODO check_or_create_incoming_payment
-      #   incoming_payment = IncomingPayment.create!(
-      #     journal_entry_id: sale.journal_entry.id,
-      #     affair_id: sale.affair.id,
-      #     amount: sale.amount,
-      #     currency: sale.currency,
-      #     mode_id: 2,
-      #     payer: sale.client
-      #   )
-      # end
+      binding.pry
+      if order[:payment_status] == "paid"
 
+        # TODO create a loop for every payment_links
+        mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, order[:payment_links].first[:payment][:payment_source_id].to_s).first
+        binding.pry
 
-      # Carte Bancaire, Espèces, Chèque, Virement Bancaire => credit_card, cash, check, transfer order[:payment_links].first[:payment][:payment_source][:handle]
+        # TODO check_or_create_incoming_payment
+        incoming_payment = IncomingPayment.create!(
+          journal_entry_id: sale.journal_entry.id,
+          affair_id: sale.affair.id,
+          amount: sale.amount,
+          currency: sale.currency,
+          mode_id: mode.id,
+          payer: sale.client
+        )
+      end
+
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 #|| order[:id] == 133605 || order[:id] == 133591
+      if order[:id] == 133607 || order[:id] == 133591 #|| order[:id] == 133605
         # Check and define the state's sale
         invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
         confirmed_date = order[:state] == "validated" ? order[:date] : nil
-
-        binding.pry
 
         sale = Sale.new(
           client_id: entity.id,
@@ -341,7 +343,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         sale.save!
 
         # TODO update status of sale from baqio status
-        # sale.update!(state: SALE_STATE[order[:state]])
+        sale.update!(state: SALE_STATE[order[:state]])
         # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
         # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
         # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
