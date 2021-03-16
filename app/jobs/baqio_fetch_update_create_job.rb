@@ -42,7 +42,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       # TODO call create or update cashes from baqio api
       create_or_update_cashe
       # TODO create or update incoming_payment_mode from baqio api
-      #create_or_update_incoming_payment_mode
+      create_or_update_incoming_payment_mode
 
       # Create sales from baqio order's @page +=1)
       # Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
@@ -69,20 +69,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     Baqio::BaqioIntegration.fetch_bank_informations.execute do |c|
       c.success do |list|
         list.map do |bank_information|
-          iban = bank_information[:iban]
+          iban = bank_information[:iban].gsub(/\s+/, "")
           cash = Cash.where(iban: iban)
 
-          binding.pry
           if cash.any?
-            cash
+            cash.first
 
             # If exist and provider is nil update it 
 
           else
-            account = create_account(bank_information, list)
+            account = create_account(bank_information)
             journal = create_journal(bank_information, list)
-
-            binding.pry
 
             cash = Cash.create!(
               name: bank_information[:domiciliation],
@@ -121,7 +118,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     account_number_prefix = "512" + (array.max + 1).to_s
     account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number_prefix)
 
-    binding.pry
     account = Account.create!(
       number: account_number,
       name: "Banque" + bank_information[:domiciliation],
@@ -129,24 +125,61 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     )
   end
 
+  # Create or find Cash with cash_box nature
+  def create_or_find_cash_box
+    account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(531101)
+    cashes = Cash.cash_boxes.joins(:main_account).where(accounts: {number: account_number})
+
+    if cashes.any?
+      cashes.first
+    else
+      account = Account.create!(
+        number: account_number,
+        name: "Caisse Baqio"
+      )
+  
+      journal = Journal.create!(
+        name: "Caisse Baqio",
+        code: "11B1"         
+      )
+  
+      cash = Cash.create!(
+        name: "Caisse Baqio",
+        nature: "cash_box",
+        journal_id: journal.id,
+        main_account_id: account.id
+      )
+    end
+  end
+
   # TODO create or update incoming_payment_mode from baqio api
   def create_or_update_incoming_payment_mode
     Baqio::BaqioIntegration.fetch_payment_sources.execute do |c|
       c.success do |list|
-        list.map do |incoming_payment_mode|
-            incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:id].to_s)
-  
-            if incoming_payment_modes.any?
-              binding.pry
-              incoming_payment_modes.first
+        list.select{ |c| c[:displayed] == true}.map do |incoming_payment_mode|
+          incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:id].to_s)
+          
+          if incoming_payment_modes.any?
+            incoming_payment_modes.first
+          else
+            # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
+            if incoming_payment_mode[:name] == "Espèces"
+              cash = create_or_find_cash_box
             else
-              binding.pry
-              # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
-              incoming_payment_mode = IncomingPaymentMode.create!(
-                name: incoming_payment_mode[:name],
-                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s} }
-              )
+              
+              if incoming_payment_mode[:bank_information_id].nil?
+                cash = Cash.of_provider_vendor(VENDOR).of_provider_data('primary', "true").first
+              else
+                cash = Cash.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:bank_information_id].to_s).first
+              end
             end
+
+            incoming_payment_mode = IncomingPaymentMode.create!(
+              name: incoming_payment_mode[:name],
+              cash_id: cash.id,
+              provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s, bank_information_id: incoming_payment_mode[:bank_information_id].to_s} }
+            )
+          end
         end
       end
     end
