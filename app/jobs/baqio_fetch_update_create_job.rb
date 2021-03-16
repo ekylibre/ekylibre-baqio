@@ -75,9 +75,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           binding.pry
           if cash.any?
             cash
+
+            # If exist and provider is nil update it 
+
           else
+            account = create_account(bank_information, list)
             journal = create_journal(bank_information, list)
-            account = Account.find_by(name: "Banques")
 
             binding.pry
 
@@ -88,7 +91,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               iban: bank_information[:iban],
               journal_id: journal.id,
               main_account_id: account.id,
-              provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+              provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
             )
           end
 
@@ -102,18 +105,27 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     journal = Journal.create!(
       name: "Banque" + bank_information[:domiciliation],
       code: "21B" + bank_information_index,
-      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
     )
   end
 
-  def create_account
-    account_number_digits = Preference.find_by(name: "account_number_digits").integer_value
+  def create_account(bank_information)
+    # # Find all account with first 3 number "512"
+    accounts = Account.select{|a| a.number.first(3) == "512"}
 
+    # Check and compare all the following number if they are not 0
+    array = []
+    last_account_number_without_prefix =  accounts.each {|a| array << a.number[3].to_i}
+
+    # Find the last one and add 1
+    account_number_prefix = "512" + (array.max + 1).to_s
+    account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number_prefix)
+
+    binding.pry
     account = Account.create!(
-      number: ,
+      number: account_number,
       name: "Banque" + bank_information[:domiciliation],
-      label: ,
-      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s } }
+      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary] }}
     )
   end
 
