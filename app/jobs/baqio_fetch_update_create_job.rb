@@ -7,10 +7,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   VENDOR = 'baqio'
 
   SALE_STATE = {
-    "draft" => :draft, "pending" => :estimate,
+    "draft" => :draft, "pending" => :order,
     "validated" => :order, "removed" => :aborted,
     "invoiced" => :invoice, "cancelled" => :refused
   }
+
+  SALE_STATE_TO_UPDATE = ["draft", "pending", "validated"]
 
   PRODUCT_CATEGORY_BAQIO = {
     1 => "Vin tranquille", 2 => "Vin mousseux", 3 => "Cidre",
@@ -246,7 +248,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 #|| order[:id] == 133591 #|| order[:id] == 133605 || order[:id] == 133591
+      if order[:id] == 219494 || order[:id] == 219524 || order[:id] == 219717
         binding.pry
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
@@ -308,43 +310,55 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sale = sales.first
 
       binding.pry
-      order[:order_lines_not_deleted].each do |product_order|
-        create_or_update_sale_items(sale, product_order, order)
+      # Update sale if sale provider updated_at is different from Baqio order[:updated_at] and Baqio order[:state] is in the SALE_STATE_TO_UPDATE
+      if sale.provider[:data]["updated_at"] != order[:updated_at] && sale.state != SALE_STATE[order[:state]] && SALE_STATE_TO_UPDATE.include?(order[:state])
+        binding.pry
+        # Delete all sales items and create new one
+        sale.items.destroy_all
+
+        order[:order_lines_not_deleted].each do |product_order|
+          create_or_update_sale_items(sale, product_order, order)
+        end
+
+        invoiced_date = order[:state] == "invoiced" ? Date.parse(order[:date]).to_time : nil
+        confirmed_date = order[:state] == "validated" ? Date.parse(order[:date]).to_time : nil
+
+        binding.pry
+        # sale.state = SALE_STATE[order[:state]]
+        sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
+        # sale.invoiced_at = invoiced_date
+        # sale.confirmed_at = confirmed_date
+
+        sale.save!
+
+        binding.pry
+        sale.confirm(confirmed_date) if SALE_STATE[order[:state]] == :order
+        sale.invoice(invoiced_date) if SALE_STATE[order[:state]] == :invoice
+
+        # Update sale provider with new updated_at date
+        #sale.update!(provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} })
       end
-
-      binding.pry
-      sale.update!(provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} })
-      # if order[:payment_status] == "paid"
-      #   # If order is Update delete all sale items and create new sale items
-      #   if sale.provider[:data]["updated_at"] != order[:updated_at]
-      #     # Delete all sales items and create new one
-      #     sale.items.destroy_all
-
-      #     order[:order_lines_not_deleted].each do |product_order|
-      #       create_sale_items(sale, product_order, order)
-      #     end
-
-      #     order[:payment_links].each do |payment_link|
-      #       create_incoming_payment(sale, payment_link)
-      #     end
-
-      #     sale.save!
-      #   end
+      
+      # Update or Create incocoming payment
+      # order[:payment_links].each do |payment_link|
+      #   create_incoming_payment(sale, payment_link)
       # end
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 #|| order[:id] == 133591 #|| order[:id] == 133605
+      if order[:id] == 219494 || order[:id] == 219524 || order[:id] == 219717
         # Check and define the state's sale
-        invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
-        confirmed_date = order[:state] == "validated" ? order[:date] : nil
+        invoiced_date = order[:state] == "invoiced" ? Date.parse(order[:date]).to_time : nil
+        confirmed_date = ["validated", "pending"].include?(order[:state]) ? Date.parse(order[:date]).to_time : nil
+
+        binding.pry
 
         sale = Sale.new(
           client_id: entity.id,
           reference_number: nil, # TODO add invoice number from Baqio
           provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
-          invoiced_at: invoiced_date,
-          confirmed_at: confirmed_date
+          confirmed_at: confirmed_date,
+          invoiced_at: invoiced_date
         )
 
         tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
@@ -368,18 +382,20 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         sale.save!
 
-        # TODO update status of sale from baqio status
-        sale.update!(state: SALE_STATE[order[:state]])
-        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
-        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
-        # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+        # # TODO update status of sale from baqio status
+        # sale.update!(state: SALE_STATE[order[:state]])
+        # # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+        # # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
+        # # sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
 
-        # sale.propose if sale.draft?
-        # sale.confirm(sale.invoiced_at)
-        # sale.invoice(sale.invoiced_at)
+        # sale.propose if SALE_STATE[order[:state]] == :draft || :pending
+        binding.pry
+        sale.confirm(sale.confirmed_at) if SALE_STATE[order[:state]] == :order
+        sale.invoice(sale.invoiced_at) if SALE_STATE[order[:state]] == :invoice
 
         # TODO link baqio pdf to sale
-        attach_pdf_to_sale(sale, order[:invoice_debit][:file_url].to_s, order[:invoice_debit][:name])
+        binding.pry
+        attach_pdf_to_sale(sale, order)
 
         sale
       end
@@ -422,30 +438,16 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
     variant = find_or_create_variant(product_order)
 
-    if sale.nil?
-      binding.pry
-      sale.items.build(
-        sale_id: sale.id,
-        variant_id: variant.id,
-        label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
-        currency: product_order[:price_currency],
-        quantity: product_order[:quantity].to_d,
-        pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
-        compute_from: "pretax_amount",
-        tax_id: tax_order.id
-      )
-    else
-      SaleItem.create!(
-        sale_id: sale.id,
-        variant_id: variant.id,
-        label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
-        currency: product_order[:price_currency],
-        quantity: product_order[:quantity].to_d,
-        pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
-        compute_from: "pretax_amount",
-        tax_id: tax_order.id
-      )
-    end
+    sale.items.build(
+      sale_id: sale.id,
+      variant_id: variant.id,
+      label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+      currency: product_order[:price_currency],
+      quantity: product_order[:quantity].to_d,
+      pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
+      compute_from: "pretax_amount",
+      tax_id: tax_order.id
+    )
   end
 
   def fetch_product_family_and_category_id(product_variant_id)
@@ -502,9 +504,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def attach_pdf_to_sale(sale, file_url, invoice_name)
-    unless file_url.nil?
-      doc = Document.new(file: URI.open(file_url), name: invoice_name, file_file_name: invoice_name + ".pdf")
+  def attach_pdf_to_sale(sale, order)
+    binding.pry
+    if !order[:invoice_debit].nil?
+      doc = Document.new(file: URI.open(order[:invoice_debit][:file_url].to_s), name: order[:invoice_debit][:name], file_file_name: order[:invoice_debit][:name] + ".pdf")
       sale.attachments.create!(document: doc)
     end
   end
