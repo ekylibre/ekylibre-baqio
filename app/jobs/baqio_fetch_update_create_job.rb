@@ -78,9 +78,16 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           cash = Cash.where(iban: iban)
 
           if cash.any?
-            cash.first
-
+            cash = cash.first
+            # Check if Cash exist 
+            # 
+            # C)
             # If exist and provider is nil update it 
+            if cash
+            cash.update!(
+              provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
+            )
+            end
 
           else
             account = create_account(bank_information)
@@ -106,6 +113,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     bank_information_index = list.index(bank_information).to_s
     journal = Journal.create!(
       name: "Banque" + bank_information[:domiciliation],
+      nature: "bank",
       code: "BQB" + bank_information_index,
       provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
     )
@@ -145,6 +153,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   
       journal = Journal.create!(
         name: "Caisse Baqio",
+        nature: "cash",
         code: "BQC1"         
       )
   
@@ -179,11 +188,16 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               end
             end
             # TODO manage deposit with cash later
-            incoming_payment_mode = IncomingPaymentMode.create!(
-              name: incoming_payment_mode[:name],
-              cash_id: cash.id,
-              provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s, bank_information_id: incoming_payment_mode[:bank_information_id].to_s} }
-            )
+            unless cash.nil?
+              incoming_payment_mode = IncomingPaymentMode.create!(
+                name: incoming_payment_mode[:name],
+                cash_id: cash.id,
+                active: true,
+                with_accounting: true,
+                with_deposit: false,
+                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s, bank_information_id: incoming_payment_mode[:bank_information_id].to_s} }
+              )
+            end
           end
         end
       end
@@ -232,7 +246,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 || order[:id] == 133591 #|| order[:id] == 133605 || order[:id] == 133591
+      if order[:id] == 133607 #|| order[:id] == 133591 #|| order[:id] == 133605 || order[:id] == 133591
         binding.pry
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
@@ -294,26 +308,33 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sale = sales.first
 
       binding.pry
-      if order[:payment_status] == "paid"
-
-        # TODO create a loop for every payment_links
-        mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, order[:payment_links].first[:payment][:payment_source_id].to_s).first
-        binding.pry
-
-        # TODO check_or_create_incoming_payment
-        incoming_payment = IncomingPayment.create!(
-          journal_entry_id: sale.journal_entry.id,
-          affair_id: sale.affair.id,
-          amount: sale.amount,
-          currency: sale.currency,
-          mode_id: mode.id,
-          payer: sale.client
-        )
+      order[:order_lines_not_deleted].each do |product_order|
+        create_or_update_sale_items(sale, product_order, order)
       end
+
+      binding.pry
+      sale.update!(provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} })
+      # if order[:payment_status] == "paid"
+      #   # If order is Update delete all sale items and create new sale items
+      #   unless sale.provider[:data]["updated_at"] == order[:updated_at]
+      #     # Delete all sales items and create new one
+      #     sale.items.destroy_all
+
+      #     order[:order_lines_not_deleted].each do |product_order|
+      #       create_sale_items(sale, product_order, order)
+      #     end
+
+      #     order[:payment_links].each do |payment_link|
+      #       create_incoming_payment(sale, payment_link[:payment][:payment_source_id].to_s)
+      #     end
+  
+      #     sale.save!
+      #   end
+      # end
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 133607 || order[:id] == 133591 #|| order[:id] == 133605
+      if order[:id] == 133607 #|| order[:id] == 133591 #|| order[:id] == 133605
         # Check and define the state's sale
         invoiced_date = order[:state] == "invoiced" ? order[:date] : nil
         confirmed_date = order[:state] == "validated" ? order[:date] : nil
@@ -321,7 +342,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         sale = Sale.new(
           client_id: entity.id,
           reference_number: nil, # TODO add invoice number from Baqio
-          provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s} },
+          provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
           invoiced_at: invoiced_date,
           confirmed_at: confirmed_date
         )
@@ -344,6 +365,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           )
         end
 
+
         sale.save!
 
         # TODO update status of sale from baqio status
@@ -361,6 +383,49 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         sale
       end
+    end
+  end
+
+  def create_incoming_payment(sale, incoming_payment_mode_id)
+    mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode_id).first
+
+    incoming_payment = IncomingPayment.create!(
+      journal_entry_id: sale.journal_entry.id,
+      affair_id: sale.affair.id,
+      amount: sale.amount,
+      currency: sale.currency,
+      mode_id: mode.id,
+      payer: sale.client
+    )
+  end
+
+  def create_or_update_sale_items(sale, product_order, order)
+    tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
+    variant = find_or_create_variant(product_order)
+    
+    if sale.nil?
+      binding.pry
+      sale.items.build(
+        sale_id: sale.id,
+        variant_id: variant.id,
+        label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+        currency: product_order[:price_currency],
+        quantity: product_order[:quantity].to_d,
+        pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
+        compute_from: "pretax_amount",
+        tax_id: tax_order.id
+      )
+    else
+      SaleItem.create!(
+        sale_id: sale.id,
+        variant_id: variant.id,
+        label: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
+        currency: product_order[:price_currency],
+        quantity: product_order[:quantity].to_d,
+        pretax_amount: (product_order[:total_price_cents] / 100.0).to_d,
+        compute_from: "pretax_amount",
+        tax_id: tax_order.id
+      )
     end
   end
 
