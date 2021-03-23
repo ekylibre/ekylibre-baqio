@@ -308,7 +308,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sale = sales.first
 
       # Update sale if sale provider updated_at is different from Baqio order[:updated_at] and Baqio order[:state] is in the SALE_STATE_TO_UPDATE
-      if sale.provider[:data]["updated_at"] != order[:updated_at] && sale.state != SALE_STATE[order[:state]]
+      if sale.provider[:data]["updated_at"] != order[:updated_at] && sale.state != SALE_STATE[order[:state]] && sale.state != "invoice"
+        binding.pry
         # Delete all sales items and create new one
         sale.items.destroy_all
 
@@ -328,13 +329,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         attach_pdf_to_sale(sale, order) if SALE_STATE[order[:state]] == :invoice
 
-        binding.pry
       end
+
+      # TODO
+      # If sale.state == "invoice" AND order with the same id as provider != invoice Cancel sale
       
       # Update or Create incocoming payment
-      # order[:payment_links].each do |payment_link|
-      #   create_incoming_payment(sale, payment_link)
-      # end
+      order[:payment_links].each do |payment_link|
+        create_incoming_payment(sale, payment_link)
+      end
 
     else
       # TO REMOVE later / Create only 2 orders for testing
@@ -374,13 +377,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def create_incoming_payment(sale, payment_link)
 
     mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:payment_source_id].to_s).first
-    incoming_payment = IncomingPayment.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:id]).first
+    incoming_payment = IncomingPayment.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:id].to_s).first
 
     baqio_payment_amount = payment_link[:payment][:amount_cents].to_d * 0.01
     baqio_payment_date = Date.parse(payment_link[:payment][:date].to_s).to_time
     baqio_payment_currency = payment_link[:payment][:amount_currency]
 
     if incoming_payment
+      binding.pry
       # update incoming payment attrs
       incoming_payment.paid_at = baqio_payment_date
       incoming_payment.to_bank_at = Time.zone.now
@@ -388,6 +392,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       incoming_payment.currency = baqio_payment_currency
       incoming_payment.save!
     else
+      binding.pry
+
       # create incoming payment
       # payment_link[:payment]
       incoming_payment = IncomingPayment.create!(
@@ -398,7 +404,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         payer: sale.client,
         paid_at: baqio_payment_date,
         to_bank_at: Time.zone.now,
-        provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: incoming_payment_id} }
+        provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: payment_link[:payment][:id]} }
       )
     end
   end
