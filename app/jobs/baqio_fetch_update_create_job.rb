@@ -55,7 +55,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           @page_with_orders = list
           list.map do |order|
             entity = find_or_create_entity(order)
-            find_or_create_sale(order, entity)
+            create_or_update_sale(order, entity)
           end
         end
       end
@@ -75,24 +75,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       c.success do |list|
         list.map do |bank_information|
           iban = bank_information[:iban].gsub(/\s+/, "")
-          cash = Cash.where(iban: iban)
+          cash = Cash.find_by(iban: iban)
 
-          if cash.any?
-            cash = cash.first
-            # Check if Cash exist
-            #
-            # C)
-            # If exist and provider is nil update it
-            if cash
+          if cash
             cash.update!(
+              name: bank_information[:domiciliation],
               provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
             )
-            end
-
           else
             account = create_account(bank_information)
             journal = create_journal(bank_information, list)
-
+    
             cash = Cash.create!(
               name: bank_information[:domiciliation],
               nature: "bank_account",
@@ -188,7 +181,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               end
             end
             # TODO manage deposit with cash later
-            unless cash.nil?
+            if !cash.nil?
+              binding.pry
               incoming_payment_mode = IncomingPaymentMode.create!(
                 name: incoming_payment_mode[:name],
                 cash_id: cash.id,
@@ -246,7 +240,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125
+      if order[:id] == 220125 || order[:id] == 220138
         binding.pry
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
@@ -302,7 +296,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def find_or_create_sale(order, entity)
+  def create_or_update_sale(order, entity)
     sales = Sale.of_provider_vendor(VENDOR).of_provider_data(:id, order[:id].to_s)
     if sales.any?
       sale = sales.first
@@ -336,12 +330,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       
       # Update or Create incocoming payment
       order[:payment_links].each do |payment_link|
-        create_incoming_payment(sale, payment_link)
+        create_update_or_delete_incoming_payment(sale, payment_link)
       end
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125
+      if order[:id] == 220125 || order[:id] == 220138
         binding.pry
 
         sale = Sale.new(
@@ -369,12 +363,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         # TODO link baqio pdf to sale
         attach_pdf_to_sale(sale, order)
 
+        # Update or Create incocoming payment
+        order[:payment_links].each do |payment_link|
+          create_update_or_delete_incoming_payment(sale, payment_link)
+        end
+
         sale
       end
     end
   end
 
-  def create_incoming_payment(sale, payment_link)
+  def create_update_or_delete_incoming_payment(sale, payment_link)
 
     mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:payment_source_id].to_s).first
     incoming_payment = IncomingPayment.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:id].to_s).first
@@ -383,7 +382,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     baqio_payment_date = Date.parse(payment_link[:payment][:date].to_s).to_time
     baqio_payment_currency = payment_link[:payment][:amount_currency]
 
-    if incoming_payment
+    if incoming_payment && payment_link[:payment][:deleted_at].nil?
       binding.pry
       # update incoming payment attrs
       incoming_payment.paid_at = baqio_payment_date
@@ -391,7 +390,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       incoming_payment.amount = baqio_payment_amount
       incoming_payment.currency = baqio_payment_currency
       incoming_payment.save!
-    else
+
+    #TODO Detach from affair or delete incoming_payment
+    elsif incoming_payment && !payment_link[:payment][:deleted_at].nil?
+      binding.pry
+      incoming_payment.delete
+
+    elsif payment_link[:payment][:deleted_at].nil?
       binding.pry
 
       # create incoming payment
@@ -406,6 +411,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         to_bank_at: Time.zone.now,
         provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: payment_link[:payment][:id]} }
       )
+    else
+      binding.pry
+      # TODO NOTHING
     end
   end
 
