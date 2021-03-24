@@ -182,7 +182,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             end
             # TODO manage deposit with cash later
             if !cash.nil?
-              binding.pry
               incoming_payment_mode = IncomingPaymentMode.create!(
                 name: incoming_payment_mode[:name],
                 cash_id: cash.id,
@@ -240,8 +239,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125 || order[:id] == 220138
-        binding.pry
+      if order[:id] == 220125 || order[:id] == 220138 || order[:id] == 219524
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
                       else
@@ -303,7 +301,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
       # Update sale if sale provider updated_at is different from Baqio order[:updated_at] and Baqio order[:state] is in the SALE_STATE_TO_UPDATE
       if sale.provider[:data]["updated_at"] != order[:updated_at] && sale.state != SALE_STATE[order[:state]] && sale.state != "invoice"
-        binding.pry
         # Delete all sales items and create new one
         sale.items.destroy_all
 
@@ -335,8 +332,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125 || order[:id] == 220138
-        binding.pry
+      if order[:id] == 220125 || order[:id] == 220138 || order[:id] == 219524
 
         sale = Sale.new(
           client_id: entity.id,
@@ -346,7 +342,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
 
-        binding.pry
         # Create SaleItem
         order[:order_lines_not_deleted].each do |product_order|
           create_or_update_sale_items(sale, product_order, order)
@@ -357,6 +352,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         # Update sale state
         order_date = Date.parse(order[:date]).to_time
         sale.propose
+        sale.abort if SALE_STATE[order[:state]] == :aborted
         sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
         sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
 
@@ -382,8 +378,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     baqio_payment_date = Date.parse(payment_link[:payment][:date].to_s).to_time
     baqio_payment_currency = payment_link[:payment][:amount_currency]
 
+    # Update if incoming_payment exist AND if payment_link[:payment][:deleted_at] is nil
     if incoming_payment && payment_link[:payment][:deleted_at].nil?
-      binding.pry
       # update incoming payment attrs
       incoming_payment.paid_at = baqio_payment_date
       incoming_payment.to_bank_at = Time.zone.now
@@ -391,16 +387,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       incoming_payment.currency = baqio_payment_currency
       incoming_payment.save!
 
-    #TODO Detach from affair or delete incoming_payment
+    # Delete if incoming_payment exist AND if payment_link[:payment][:deleted_at] is not nil (date)
     elsif incoming_payment && !payment_link[:payment][:deleted_at].nil?
-      binding.pry
       incoming_payment.delete
-
+    
+    # Create if incoming_payment doesn't exist AND if payment_link[:payment][:deleted_at] is nil
     elsif payment_link[:payment][:deleted_at].nil?
-      binding.pry
 
-      # create incoming payment
-      # payment_link[:payment]
       incoming_payment = IncomingPayment.create!(
         affair_id: sale.affair.id,
         amount: baqio_payment_amount,
@@ -411,10 +404,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         to_bank_at: Time.zone.now,
         provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: payment_link[:payment][:id]} }
       )
+
+    # Do not create IncomingPayment if payment_link[:payment][:deleted_at] present
     else
-      binding.pry
-      # TODO NOTHING
+
     end
+
+    # TODO LATER detach affaire
   end
 
   def create_or_update_sale_items(sale, product_order, order)
@@ -488,7 +484,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def attach_pdf_to_sale(sale, order)
-    binding.pry
     if !order[:invoice_debit].nil?
       doc = Document.new(file: URI.open(order[:invoice_debit][:file_url].to_s), name: order[:invoice_debit][:name], file_file_name: order[:invoice_debit][:name] + ".pdf")
       sale.attachments.create!(document: doc)

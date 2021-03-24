@@ -2,7 +2,7 @@ module Backend
   module Cells
     class LastSalesBaqioCellsController < Backend::Cells::BaseController
 
-      list(model: :sales, conditions: ("provider ->> 'vendor' = 'Baqio'"), order: 'created_at DESC', per_page: 5) do |t|
+      list(model: :sales, conditions: ("provider ->> 'vendor' = 'baqio'"), order: 'created_at DESC', per_page: 5) do |t|
         t.column :number, url: { controller: '/backend/sales' }
         t.column :created_at
         t.status
