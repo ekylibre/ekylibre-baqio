@@ -83,7 +83,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
               provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
             )
           else
-            account = create_account(bank_information)
+            account = find_or_create_account(bank_information)
             journal = create_journal(bank_information, list)
     
             cash = Cash.create!(
@@ -108,31 +108,37 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       name: "Banque" + bank_information[:domiciliation],
       nature: "bank",
       code: "BQB" + bank_information_index,
-      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
+      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
     )
   end
 
-  def create_account(bank_information)
-    # # Find all account with first 3 number BANK_ACCOUNT_PREFIX_NUMBER
-    accounts = Account.select{|a| a.number.first(3) == BANK_ACCOUNT_PREFIX_NUMBER }
+  def find_or_create_account(bank_information)
+    account = Account.of_provider_vendor(VENDOR).of_provider_data(:id, bank_information[:id].to_s).first
 
-    # Check and compare all the following number if they are not 0
-    array = []
-    last_account_number_without_prefix =  accounts.each {|a| array << a.number[3].to_i}
+    if account
+      account
+    else
+      # Find all account with first 3 number BANK_ACCOUNT_PREFIX_NUMBER
+      accounts = Account.select{|a| a.number.first(3) == BANK_ACCOUNT_PREFIX_NUMBER }
 
-    # Find the last one and add 1
-    account_number_prefix = BANK_ACCOUNT_PREFIX_NUMBER + (array.max + 1).to_s
-    account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number_prefix)
+      # Check and compare all the following number if they are not 0
+      array = []
+      last_account_number_without_prefix =  accounts.each {|a| array << a.number[3].to_i}
 
-    account = Account.create!(
-      number: account_number,
-      name: "Banque" + bank_information[:domiciliation],
-      provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary] }}
-    )
+      # Find the last one and add 1
+      account_number_prefix = BANK_ACCOUNT_PREFIX_NUMBER + (array.max + 1).to_s
+      account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number_prefix)
+
+      account = Account.create!(
+        number: account_number,
+        name: "Banque" + bank_information[:domiciliation],
+        provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
+      )
+    end
   end
 
   # Create or find Cash with cash_box nature
-  def create_or_find_cash_box
+  def find_or_create_cash_box
     account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(BAQIO_CASH_ACCOUNT_NUMBER)
     cashes = Cash.cash_boxes.joins(:main_account).where(accounts: {number: account_number})
 
@@ -171,7 +177,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           else
             # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
             if incoming_payment_mode[:name] == "Espèces"
-              cash = create_or_find_cash_box
+              cash = find_or_create_cash_box
             else
 
               if incoming_payment_mode[:bank_information_id].nil?
