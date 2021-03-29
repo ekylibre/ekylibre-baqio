@@ -368,7 +368,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def create_update_or_delete_incoming_payment(sale, payment_link)
-
     mode = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:payment_source_id].to_s).first
     incoming_payment = IncomingPayment.of_provider_vendor(VENDOR).of_provider_data(:id, payment_link[:payment][:id].to_s).first
 
@@ -384,14 +383,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       incoming_payment.amount = baqio_payment_amount
       incoming_payment.currency = baqio_payment_currency
       incoming_payment.save!
+    end
 
-    # Delete if incoming_payment exist AND if payment_link[:payment][:deleted_at] is not nil (date)
-    elsif incoming_payment && !payment_link[:payment][:deleted_at].nil?
+    # Delete if incoming_payment exist AND if payment_link[:payment][:deleted_at] is present (date)
+    if incoming_payment && payment_link[:payment][:deleted_at].present?
       incoming_payment.destroy
-    
-    # Create if incoming_payment doesn't exist AND if payment_link[:payment][:deleted_at] is nil
-    elsif payment_link[:payment][:deleted_at].nil?
+    end
 
+    # Create if incoming_payment doesn't exist AND if payment_link[:payment][:deleted_at] is nil
+    if incoming_payment.nil? && payment_link[:payment][:deleted_at].nil?
       incoming_payment = IncomingPayment.create!(
         affair_id: sale.affair.id,
         amount: baqio_payment_amount,
@@ -402,10 +402,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         to_bank_at: Time.zone.now,
         provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: payment_link[:payment][:id]} }
       )
-
-    # Do not create IncomingPayment if payment_link[:payment][:deleted_at] present
-    else
-
     end
 
     # TODO LATER detach affaire
