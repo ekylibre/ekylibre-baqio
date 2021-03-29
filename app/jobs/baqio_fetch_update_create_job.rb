@@ -245,7 +245,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125 || order[:id] == 220138 || order[:id] == 220150
+      if order[:id] == 220138
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
                       else
@@ -316,7 +316,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         # Update sale provider with new updated_at
         sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
-
         sale.save!
 
         # Update sale state
@@ -338,11 +337,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220125 || order[:id] == 220138 || order[:id] == 220150
+      if order[:id] == 220138
 
         sale = Sale.new(
           client_id: entity.id,
-          reference_number: nil, # TODO add invoice number from Baqio
+          created_at: order[:created_at],
+          reference_number: order[:name], # TODO add invoice number from Baqio
           provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
         )
         
@@ -423,9 +423,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def create_or_update_sale_items(sale, product_order, order)
     tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
     variant = find_or_create_variant(product_order)
-    reduction_percentage = product_order[:total_discount_cents] == 0 ? 0 : (product_order[:total_discount_cents].to_f /  product_order[:final_price_with_tax_cents].to_f) * 100
-
-    binding.pry
+    reduction_percentage = product_order[:total_discount_cents] == 0 ? 0 : (product_order[:total_discount_cents].to_f /  product_order[:final_price_cents].to_f) * 100
 
     sale.items.build(
       sale_id: sale.id,
@@ -434,8 +432,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       currency: product_order[:price_currency],
       quantity: product_order[:quantity].to_d,
       reduction_percentage: reduction_percentage,
+      pretax_amount: (product_order[:final_price_cents] / 100.0).to_d,
       amount: (product_order[:final_price_with_tax_cents] / 100.0).to_d,
-      compute_from: "amount",
+      compute_from: "pretax_amount",
       tax_id: tax_order.id
     )
   end
