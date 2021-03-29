@@ -245,17 +245,18 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220138
+      if order[:id] == 220653
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
                       else
-                        order[:customer][:billing_information][:last_name]
+                        order[:customer][:name]
                       end
         # TODO check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
         # Need API update from Baqio, method customer/id doesn't work
         entity = Entity.create!(
           first_name: order[:customer][:billing_information][:first_name],
           last_name: custom_name,
+          client: true,
           provider: {
                     vendor: VENDOR,
                     name: "Baqio_order_customer",
@@ -318,10 +319,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
         sale.save!
 
-        # Update sale state
-        order_date = Date.parse(order[:date]).to_time
-        sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
-        sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
+        update_sale_state(sale, order)
 
         attach_pdf_to_sale(sale, order) if SALE_STATE[order[:state]] == :invoice
 
@@ -337,33 +335,26 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220138
-
+      if order[:id] == 220653
         sale = Sale.new(
           client_id: entity.id,
-          created_at: order[:created_at],
           reference_number: order[:name], # TODO add invoice number from Baqio
           provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
         )
         
-        # Methode pour syncrhoniser les taxes
-        tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
-
-        # Create SaleItem
+        binding.pry
+        # Create SaleItem if order[:order_lines_not_deleted] is not nil
         order[:order_lines_not_deleted].each do |product_order|
-          create_or_update_sale_items(sale, product_order, order)
+          if !product_order.nil?
+            create_or_update_sale_items(sale, product_order, order)
+          end
         end
 
         sale.save!
+        sale.update!(created_at: order[:created_at].to_time)
 
-        # Update sale state
-        order_date = Date.parse(order[:date]).to_time
-        sale.propose
-        sale.abort if SALE_STATE[order[:state]] == :aborted
-        sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
-        sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
+        update_sale_state(sale, order)
 
-        # TODO link baqio pdf to sale
         attach_pdf_to_sale(sale, order)
 
         # Update or Create incocoming payment
@@ -421,6 +412,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def create_or_update_sale_items(sale, product_order, order)
+    # Methode pour syncrhoniser les taxes
     tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
     variant = find_or_create_variant(product_order)
     reduction_percentage = product_order[:total_discount_cents] == 0 ? 0 : (product_order[:total_discount_cents].to_f /  product_order[:final_price_cents].to_f) * 100
@@ -437,6 +429,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       compute_from: "pretax_amount",
       tax_id: tax_order.id
     )
+  end
+
+  def update_sale_state(sale, order)
+    order_date = Date.parse(order[:date]).to_time
+
+    sale.propose if sale.items.present?
+    sale.abort if SALE_STATE[order[:state]] == :aborted
+    sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
+    sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
   end
 
   def fetch_product_family_and_category_id(product_variant_id)
