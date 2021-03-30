@@ -245,7 +245,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220653
+      if order[:id] == 220653 || order[:id] == 220670 || order[:id] == 220672
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
                       else
@@ -317,8 +317,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
         # Update sale provider with new updated_at
         sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
+        sale.reference_number = order[:invoice_debit][:name] if SALE_STATE[order[:state]] == :invoice
         sale.save!
-
+        binding.pry
+        
         update_sale_state(sale, order)
 
         attach_pdf_to_sale(sale, order) if SALE_STATE[order[:state]] == :invoice
@@ -335,14 +337,13 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220653
+      if order[:id] == 220653 || order[:id] == 220670 || order[:id] == 220672
         sale = Sale.new(
           client_id: entity.id,
           reference_number: order[:name], # TODO add invoice number from Baqio
           provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
         )
         
-        binding.pry
         # Create SaleItem if order[:order_lines_not_deleted] is not nil
         order[:order_lines_not_deleted].each do |product_order|
           if !product_order.nil?
@@ -350,8 +351,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           end
         end
 
+        binding.pry
         sale.save!
         sale.update!(created_at: order[:created_at].to_time)
+        sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
 
         update_sale_state(sale, order)
 
