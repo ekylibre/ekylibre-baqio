@@ -55,11 +55,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         c.success do |list|
           @page_with_orders = list
 
-          max_date = FinancialYear.where(state: "opened").map{|mx| mx.stopped_on.to_time}
-          min_date = FinancialYear.where(state: "opened").map{|md| md.started_on.to_time}
+          max_date = FinancialYear.where(state: "opened").map{ |date| date.stopped_on.to_time }
+          min_date = FinancialYear.where(state: "opened").map{ |date| date.started_on.to_time }
           # select only order with date located in opened financial year
 
-          list.select{ |c| max_date.max > c[:date].to_time && c[:date].to_time > min_date.min }.map do |order|
+          list.select{ |order| max_date.max > order[:date].to_time && order[:date].to_time > min_date.min }.map do |order|
             entity = find_or_create_entity(order)
             create_or_update_sale(order, entity)
           end
