@@ -1,22 +1,25 @@
-$:.push File.expand_path("../lib", __FILE__)
-
 # Maintain your gem's version:
-require "ekylibre-baqio/version"
+require_relative "lib/ekylibre-baqio/version"
 
 # Describe your gem and declare its dependencies:
-Gem::Specification.new do |s|
-  s.name        = "ekylibre-baqio"
-  s.version     = EkylibreBaqio::VERSION
-  s.authors     = ["RG24"]
-  s.email       = ["groche@ekylibre.com"]
-  s.summary     = "Baqio plugin for Ekylibre"
-  s.description = "Baqio plugin for Ekylibre"
-  s.license     = "MIT"
+Gem::Specification.new do |spec|
+  spec.name = "ekylibre-baqio"
+  spec.version = EkylibreBaqio::VERSION
+  spec.authors = ['Ekylibre developers']
+  spec.email = ['dev@ekylibre.com']
 
-  s.files = Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.rdoc", "Capfile"]
-  s.require_path = ['lib']
-  s.test_files = Dir["test/**/*"]
-  s.add_dependency 'vcr'
-  s.add_dependency 'webmock'
-  s.add_dependency 'dotenv'
+  spec.summary = "Baqio plugin for Ekylibre"
+  spec.required_ruby_version = '>= 2.6.0'
+  spec.homepage = 'https://www.ekylibre.com'
+  spec.license = 'AGPL-3.0-only'
+
+  spec.files = Dir.glob(%w[{app,config,db,lib}/**/* LICENSE.md])
+
+  spec.require_path = ['lib']
+
+  spec.add_dependency 'dotenv', '~> 2.7'
+  spec.add_dependency 'vcr', '~> 6.0'
+  spec.add_dependency 'webmock', '~> 3.11'
+
+  spec.add_development_dependency 'rubocop', '1.11.0'
 end
