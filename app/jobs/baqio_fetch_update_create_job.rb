@@ -6,10 +6,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   VENDOR = 'baqio'
 
+  # SALTE_STATE "cancelled" is invoice, need to be change to V2
   SALE_STATE = {
     "draft" => :draft, "pending" => :order,
     "validated" => :order, "removed" => :aborted,
-    "invoiced" => :invoice, "cancelled" => :refused
+    "invoiced" => :invoice, "cancelled" => :invoice
   }
 
   PRODUCT_CATEGORY_BAQIO = {
@@ -50,10 +51,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       create_or_update_incoming_payment_mode
 
       # Create sales from baqio order's @page +=1)
-      Baqio::BaqioIntegration.fetch_orders(1).execute do |c|
+      Baqio::BaqioIntegration.fetch_orders(@page +=1).execute do |c|
         c.success do |list|
           @page_with_orders = list
-          list.map do |order|
+
+          max_date = FinancialYear.where(state: "opened").map{|mx| mx.stopped_on.to_time}
+          min_date = FinancialYear.where(state: "opened").map{|md| md.started_on.to_time}
+          # select only order with date located in opened financial year
+
+          list.select{ |c| max_date.max > c[:date].to_time && c[:date].to_time > min_date.min }.map do |order|
             entity = find_or_create_entity(order)
             create_or_update_sale(order, entity)
           end
@@ -64,7 +70,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       Rails.logger.error $!
       Rails.logger.error $!.backtrace.join("\n")
       ExceptionNotifier.notify_exception($!, data: { message: error })
-    end #while @page_with_orders.blank? == false || @page == 50
+    end while @page_with_orders.blank? == false || @page == 50
   end
 
   private
@@ -245,7 +251,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       entity = entities.first
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220653 || order[:id] == 220670 || order[:id] == 220672
         custom_name = if order[:customer][:billing_information][:last_name].nil?
                         order[:customer][:billing_information][:company_name]
                       else
@@ -297,7 +302,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         end
 
         entity
-      end
     end
   end
 
@@ -319,7 +323,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
         sale.reference_number = order[:invoice_debit][:name] if SALE_STATE[order[:state]] == :invoice
         sale.save!
-        binding.pry
         
         update_sale_state(sale, order)
 
@@ -337,36 +340,34 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     else
       # TO REMOVE later / Create only 2 orders for testing
-      if order[:id] == 220653 || order[:id] == 220670 || order[:id] == 220672
-        sale = Sale.new(
-          client_id: entity.id,
-          reference_number: order[:name], # TODO add invoice number from Baqio
-          provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
-        )
-        
-        # Create SaleItem if order[:order_lines_not_deleted] is not nil
-        order[:order_lines_not_deleted].each do |product_order|
-          if !product_order.nil?
-            create_or_update_sale_items(sale, product_order, order)
-          end
+      sale = Sale.new(
+        client_id: entity.id,
+        reference_number: order[:name], # TODO add invoice number from Baqio
+        provider: { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} },
+      )
+      
+      # Create SaleItem if order[:order_lines_not_deleted] is not nil
+      order[:order_lines_not_deleted].each do |product_order|
+        if !product_order.nil?
+          create_or_update_sale_items(sale, product_order, order)
         end
-
-        binding.pry
-        sale.save!
-        sale.update!(created_at: order[:created_at].to_time)
-        sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
-
-        update_sale_state(sale, order)
-
-        attach_pdf_to_sale(sale, order)
-
-        # Update or Create incocoming payment
-        order[:payment_links].each do |payment_link|
-          create_update_or_delete_incoming_payment(sale, payment_link)
-        end
-
-        sale
       end
+
+      sale.save!
+      sale.update!(created_at: order[:created_at].to_time)
+      sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
+
+      update_sale_state(sale, order)
+
+      attach_pdf_to_sale(sale, order)
+
+      # Update or Create incocoming payment
+      order[:payment_links].each do |payment_link|
+        create_update_or_delete_incoming_payment(sale, payment_link)
+      end
+
+      sale
+      
     end
   end
 
@@ -412,7 +413,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   def create_or_update_sale_items(sale, product_order, order)
     # Methode pour syncrhoniser les taxes
-    tax_order = Tax.find_by(amount: order[:tax_lines].first[:tax_percentage])
+    tax_percentage = order[:tax_lines]
+    tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
+
     variant = find_or_create_variant(product_order)
     reduction_percentage = product_order[:total_discount_cents] == 0 ? 0 : (product_order[:total_discount_cents].to_f /  product_order[:final_price_cents].to_f) * 100
 
@@ -433,6 +436,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def update_sale_state(sale, order)
     order_date = Date.parse(order[:date]).to_time
 
+    sale.correct if SALE_STATE[order[:state]] == :aborted
     sale.propose if sale.items.present?
     sale.abort if SALE_STATE[order[:state]] == :aborted
     sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
