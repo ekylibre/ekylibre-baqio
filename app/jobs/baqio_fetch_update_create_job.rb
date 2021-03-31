@@ -383,7 +383,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if incoming_payment && payment_link[:payment][:deleted_at].nil?
       # update incoming payment attrs
       incoming_payment.paid_at = baqio_payment_date
-      incoming_payment.to_bank_at = Time.zone.now
+      incoming_payment.to_bank_at = baqio_payment_date
       incoming_payment.amount = baqio_payment_amount
       incoming_payment.currency = baqio_payment_currency
       incoming_payment.save!
@@ -403,7 +403,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         mode_id: mode.id,
         payer: sale.client,
         paid_at: baqio_payment_date,
-        to_bank_at: Time.zone.now,
+        to_bank_at: baqio_payment_date,
         provider: { vendor: VENDOR, name: "Baqio_payment", data: {id: payment_link[:payment][:id]} }
       )
     end
