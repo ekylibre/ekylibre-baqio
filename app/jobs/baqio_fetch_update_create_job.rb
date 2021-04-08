@@ -25,6 +25,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   CATEGORY = "wine"
 
+  CARRIAGE_CATEGORY = "carriage"
+
   BANK_ACCOUNT_PREFIX_NUMBER = "512"
 
   BAQIO_CASH_ACCOUNT_NUMBER = 531201
@@ -39,6 +41,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     @init_category = ProductNatureCategory.find_by(reference_name: CATEGORY) || ProductNatureCategory.import_from_nomenclature(CATEGORY)
 
     @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_nomenclature(CATEGORY)
+
+    @category_carriage = ProductNatureCategory.find_by(reference_name: CARRIAGE_CATEGORY) || ProductNatureCategory.import_from_nomenclature(CARRIAGE_CATEGORY)
+
+    @product_nature_carriage = ProductNature.find_by(reference_name: CARRIAGE_CATEGORY) || ProductNature.import_from_nomenclature(CARRIAGE_CATEGORY)
 
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
@@ -319,6 +325,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           create_or_update_sale_items(sale, product_order, order)
         end
 
+        # Create shipping_line SaleItem when shipping_line[:price_cents] is present
+        if order[:shipping_line][:price_cents] > 0
+          create_shipping_line_sale_item(sale, order[:shipping_line], order)
+        end
+
         # Update sale provider with new updated_at
         sale.provider = { vendor: VENDOR, name: "Baqio_order", data: {id: order[:id].to_s, updated_at: order[:updated_at]} }
         sale.reference_number = order[:invoice_debit][:name] if SALE_STATE[order[:state]] == :invoice
@@ -353,6 +364,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         end
       end
 
+      # Create shipping_line SaleItem when shipping_line[:price_cents] is present
+      if order[:shipping_line][:price_cents] > 0
+        create_shipping_line_sale_item(sale, order[:shipping_line], order)
+      end
+
       sale.save!
       sale.update!(created_at: order[:created_at].to_time)
       sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
@@ -367,7 +383,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       end
 
       sale
-      
     end
   end
 
@@ -428,6 +443,26 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       reduction_percentage: reduction_percentage,
       pretax_amount: (product_order[:final_price_cents] / 100.0).to_d,
       amount: (product_order[:final_price_with_tax_cents] / 100.0).to_d,
+      compute_from: "pretax_amount",
+      tax_id: tax_order.id
+    )
+  end
+
+  def create_shipping_line_sale_item(sale, shipping_line, order)
+    # Methode pour syncrhoniser les taxes
+    tax_percentage = order[:tax_lines]
+    tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
+
+    variant = find_or_create_shipping_variant(shipping_line)
+
+    sale.items.build(
+      sale_id: sale.id,
+      variant_id: variant.id,
+      label: "#{shipping_line[:name]}",
+      currency: shipping_line[:price_currency],
+      quantity: 1,
+      pretax_amount: (shipping_line[:price_cents] / 100.0).to_d,
+      amount: (shipping_line[:price_with_tax_cents] / 100.0).to_d,
       compute_from: "pretax_amount",
       tax_id: tax_order.id
     )
@@ -494,6 +529,25 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
         unit_name: "Unité",
         provider: { vendor: VENDOR, name: "Baqio_product_order", data: {id: product_order[:product_variant_id].to_s} }      )
+    end
+  end
+
+  def find_or_create_shipping_variant(shipping_line)
+    product_nature_variant = ProductNatureVariant.find_by(name: shipping_line[:name])
+
+    if product_nature_variant.present?
+      product_nature_variant
+    else
+      # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
+      product_nature = @product_nature_carriage
+      product_nature_category = @category_carriage
+      # Find or create new variant
+      product_nature_variant =  ProductNatureVariant.create!(
+        category_id: product_nature_category.id,
+        nature_id: product_nature.id,
+        name: "#{shipping_line[:name]}",
+        unit_name: "Unité",
+        provider: { vendor: VENDOR, name: "Baqio_shipping_line", data: {name: shipping_line[:name].to_s} })
     end
   end
 
