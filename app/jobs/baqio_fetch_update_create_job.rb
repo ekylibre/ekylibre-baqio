@@ -117,7 +117,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def create_journal(bank_information, list)
     bank_information_index = list.index(bank_information).to_s
     journal = Journal.create!(
-      name: "Banque" + bank_information[:domiciliation],
+      name: "Banque " + bank_information[:domiciliation],
       nature: "bank",
       code: "BQB" + bank_information_index,
       provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
@@ -130,19 +130,21 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     if account
       account
     else
-      # Find all account with first 3 number BANK_ACCOUNT_PREFIX_NUMBER
-      accounts = Account.select{|a| a.number.first(3) == BANK_ACCOUNT_PREFIX_NUMBER }
+      # Select all Baqio account at Ekylibre
+      accounts = Account.select{|a| a.number.first(4) == BAQIO_CASH_ACCOUNT_NUMBER.to_s.first(4) }
 
-      # Check and compare all the following number if they are not 0
-      array = []
-      last_account_number_without_prefix =  accounts.each {|a| array << a.number[3].to_i}
+      # Select all account number with the first 6 number
+      accounts_number_without_suffix =  accounts.map {|a| a.number[0..5].to_i }
 
-      # Find the last one and add 1
-      account_number_prefix = BANK_ACCOUNT_PREFIX_NUMBER + (array.max + 1).to_s
-      account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number_prefix)
+      # For the first synch if there is no Baqio account at Ekylibre
+      t = accounts_number_without_suffix.max.nil? ? BAQIO_CASH_ACCOUNT_NUMBER : accounts_number_without_suffix.max
+      
+      # Take the bigger number and add 1
+      account_number = (t + 1).to_s
+      baqio_account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number)
 
       account = Account.create!(
-        number: account_number,
+        number: baqio_account_number,
         name: "Banque" + bank_information[:domiciliation],
         provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
       )
@@ -153,7 +155,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def find_or_create_cash_box
     account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(BAQIO_CASH_ACCOUNT_NUMBER)
     cashes = Cash.cash_boxes.joins(:main_account).where(accounts: {number: account_number})
-
     if cashes.any?
       cashes.first
     else
