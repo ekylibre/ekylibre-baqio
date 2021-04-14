@@ -6,9 +6,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   VENDOR = 'baqio'
 
-  # SALTE_STATE "cancelled" is invoice, need to be change to V2
+  # SALTE_STATE "cancelled" is invoice, need to be change to V2 
   SALE_STATE = {
-    "draft" => :draft, "pending" => :order,
+    "draft" => :draft, "pending" => :estimate,
     "validated" => :order, "removed" => :aborted,
     "invoiced" => :invoice, "cancelled" => :invoice
   }
@@ -471,8 +471,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def update_sale_state(sale, order)
     order_date = Date.parse(order[:date]).to_time
 
-    sale.correct if SALE_STATE[order[:state]] == :aborted
-    sale.propose if sale.items.present?
+    sale.correct if SALE_STATE[order[:state]] == :aborted || :estimate
+    sale.propose if SALE_STATE[order[:state]] == :estimate || sale.items.present?
     sale.abort if SALE_STATE[order[:state]] == :aborted
     sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
     sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
