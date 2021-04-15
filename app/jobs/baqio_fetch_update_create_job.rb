@@ -27,7 +27,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   CARRIAGE_CATEGORY = "carriage"
 
-  BANK_ACCOUNT_PREFIX_NUMBER = "512"
+  BANK_ACCOUNT_PREFIX_NUMBER = "512201"
 
   BAQIO_CASH_ACCOUNT_NUMBER = 531201
 
@@ -92,6 +92,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           if cash
             cash.update!(
               name: bank_information[:domiciliation],
+              bank_name: bank_information[:domiciliation],
+              bank_identifier_code: bank_information[:bic],
+              bank_account_holder_name: bank_information[:owner],
+              by_default: bank_information[:primary],
               provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
             )
           else
@@ -101,10 +105,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             cash = Cash.create!(
               name: bank_information[:domiciliation],
               nature: "bank_account",
+              bank_name: bank_information[:domiciliation],
               mode: 'iban',
               iban: bank_information[:iban],
+              bank_identifier_code: bank_information[:bic],
               journal_id: journal.id,
               main_account_id: account.id,
+              bank_account_holder_name: bank_information[:owner],
+              by_default: bank_information[:primary],
               provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
             )
           end
@@ -131,21 +139,25 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       account
     else
       # Select all Baqio account at Ekylibre
-      accounts = Account.select{|a| a.number.first(4) == BAQIO_CASH_ACCOUNT_NUMBER.to_s.first(4) }
+      accounts = Account.select{ |a| a.number.first(6) == BANK_ACCOUNT_PREFIX_NUMBER.to_s.first(6) }
 
       # Select all account number with the first 6 number
-      accounts_number_without_suffix =  accounts.map {|a| a.number[0..5].to_i }
+      accounts_number_without_suffix =  accounts.map { |a| a.number[0..5].to_i }
 
       # For the first synch if there is no Baqio account at Ekylibre
-      t = accounts_number_without_suffix.max.nil? ? BAQIO_CASH_ACCOUNT_NUMBER : accounts_number_without_suffix.max
+      account_number_final =  if accounts_number_without_suffix.max.nil? 
+                                BANK_ACCOUNT_PREFIX_NUMBER
+                              else
+                                accounts_number_without_suffix.max
+                              end
       
       # Take the bigger number and add 1
-      account_number = (t + 1).to_s
+      account_number = (account_number_final + 1).to_s
       baqio_account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number)
 
       account = Account.create!(
         number: baqio_account_number,
-        name: "Banque" + bank_information[:domiciliation],
+        name: "Banque " + bank_information[:domiciliation],
         provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
       )
     end
@@ -182,32 +194,34 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   def create_or_update_incoming_payment_mode
     Baqio::BaqioIntegration.fetch_payment_sources.execute do |c|
       c.success do |list|
-        list.select{ |c| c[:displayed] == true}.map do |incoming_payment_mode|
-          incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:id].to_s)
+        list.select{ |c| c[:displayed] == true }.map do |payment_source|
+          incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, payment_source[:id].to_s)
 
           if incoming_payment_modes.any?
-            incoming_payment_modes.first
+            incoming_payment_mode = incoming_payment_modes.first
           else
             # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
-            if incoming_payment_mode[:name] == "Espèces"
+            if payment_source[:name] == "Espèces"
               cash = find_or_create_cash_box
             else
 
-              if incoming_payment_mode[:bank_information_id].nil?
-                cash = Cash.of_provider_vendor(VENDOR).of_provider_data('primary', "true").first
-              else
-                cash = Cash.of_provider_vendor(VENDOR).of_provider_data(:id, incoming_payment_mode[:bank_information_id].to_s).first
-              end
+            cash =  if payment_source[:bank_information_id].nil?
+                      Cash.of_provider_vendor(VENDOR).of_provider_data('primary', "true").first
+                    else
+                      Cash.of_provider_vendor(VENDOR).of_provider_data(:id, payment_source[:bank_information_id].to_s).first
+                    end
+
             end
+
             # TODO manage deposit with cash later
             if !cash.nil?
               incoming_payment_mode = IncomingPaymentMode.create!(
-                name: incoming_payment_mode[:name],
+                name: payment_source[:name],
                 cash_id: cash.id,
                 active: true,
                 with_accounting: true,
                 with_deposit: false,
-                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: incoming_payment_mode[:id].to_s, bank_information_id: incoming_payment_mode[:bank_information_id].to_s} }
+                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s} }
               )
             end
           end
