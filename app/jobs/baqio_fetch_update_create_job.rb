@@ -25,8 +25,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   CATEGORY = "wine"
 
-  CARRIAGE_CATEGORY = "carriage"
-
   BANK_ACCOUNT_PREFIX_NUMBER = "512201"
 
   BAQIO_CASH_ACCOUNT_NUMBER = 531201
@@ -41,10 +39,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     @init_category = ProductNatureCategory.find_by(reference_name: CATEGORY) || ProductNatureCategory.import_from_nomenclature(CATEGORY)
 
     @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_nomenclature(CATEGORY)
-
-    @category_carriage = ProductNatureCategory.find_by(reference_name: CARRIAGE_CATEGORY) || ProductNatureCategory.import_from_nomenclature(CARRIAGE_CATEGORY)
-
-    @product_nature_carriage = ProductNature.find_by(reference_name: CARRIAGE_CATEGORY) || ProductNature.import_from_nomenclature(CARRIAGE_CATEGORY)
 
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
@@ -139,18 +133,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       account
     else
       # Select all Baqio account at Ekylibre
-      accounts = Account.select{ |a| a.number.first(6) == BANK_ACCOUNT_PREFIX_NUMBER.to_s.first(6) }
+      accounts = Account.select{ |a| a.number.first(4) == BANK_ACCOUNT_PREFIX_NUMBER.first(4) }
 
       # Select all account number with the first 6 number
       accounts_number_without_suffix =  accounts.map { |a| a.number[0..5].to_i }
 
       # For the first synch if there is no Baqio account at Ekylibre
       account_number_final =  if accounts_number_without_suffix.max.nil? 
-                                BANK_ACCOUNT_PREFIX_NUMBER
+                                BANK_ACCOUNT_PREFIX_NUMBER.to_i
                               else
                                 accounts_number_without_suffix.max
                               end
-      
       # Take the bigger number and add 1
       account_number = (account_number_final + 1).to_s
       baqio_account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(account_number)
@@ -328,9 +321,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   def create_or_update_sale(order, entity)
     sales = Sale.of_provider_vendor(VENDOR).of_provider_data(:id, order[:id].to_s)
+
     if sales.any?
       sale = sales.first
-
       # Update sale if sale provider updated_at is different from Baqio order[:updated_at] and Baqio order[:state] is in the SALE_STATE_TO_UPDATE
       if sale.provider[:data]["updated_at"] != order[:updated_at] && sale.state != SALE_STATE[order[:state]] && sale.state != "invoice"
         # Delete all sales items and create new one
@@ -468,7 +461,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     tax_percentage = order[:tax_lines]
     tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
 
-    variant = find_or_create_shipping_variant(shipping_line)
+    variant = ProductNatureVariant.import_from_nomenclature(:carriage)
 
     sale.items.build(
       sale_id: sale.id,
@@ -544,25 +537,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         name: "#{product_order[:name]} - #{product_order[:complement]} - #{product_order[:description]}",
         unit_name: "Unité",
         provider: { vendor: VENDOR, name: "Baqio_product_order", data: {id: product_order[:product_variant_id].to_s} }      )
-    end
-  end
-
-  def find_or_create_shipping_variant(shipping_line)
-    product_nature_variant = ProductNatureVariant.find_by(name: shipping_line[:name])
-
-    if product_nature_variant.present?
-      product_nature_variant
-    else
-      # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
-      product_nature = @product_nature_carriage
-      product_nature_category = @category_carriage
-      # Find or create new variant
-      product_nature_variant =  ProductNatureVariant.create!(
-        category_id: product_nature_category.id,
-        nature_id: product_nature.id,
-        name: "#{shipping_line[:name]}",
-        unit_name: "Unité",
-        provider: { vendor: VENDOR, name: "Baqio_shipping_line", data: {name: shipping_line[:name].to_s} })
     end
   end
 
