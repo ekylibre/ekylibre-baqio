@@ -94,7 +94,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
             )
           else
             account = find_or_create_account(bank_information)
-            journal = create_journal(bank_information, list)
+            journal = create_journal(bank_information)
     
             cash = Cash.create!(
               name: bank_information[:domiciliation],
@@ -116,12 +116,20 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def create_journal(bank_information, list)
-    bank_information_index = list.index(bank_information).to_s
+  def create_journal(bank_information)
+    baqio_journals = Journal.select{ |journal| journal.code.first(3) == 'BQB' }
+    baqio_journals_last_code_number = baqio_journals.map { |journal| journal.code[3].to_i }
+
+    baqio_journal_code =  if baqio_journals_last_code_number.empty?
+                            1
+                          else
+                            baqio_journals_last_code_number.max + 1
+                          end
+
     journal = Journal.create!(
       name: "Banque " + bank_information[:domiciliation],
       nature: "bank",
-      code: "BQB" + bank_information_index,
+      code: "BQB#{baqio_journal_code}",
       provider: { vendor: VENDOR, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s }}
     )
   end
