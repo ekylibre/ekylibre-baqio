@@ -60,8 +60,10 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           # select only order with date located in opened financial year
 
           list.select{ |order| max_date.max > order[:date].to_time && order[:date].to_time > min_date.min }.map do |order|
-            entity = find_or_create_entity(order)
-            create_or_update_sale(order, entity)
+
+              entity = find_or_create_entity(order)
+              create_or_update_sale(order, entity)
+
           end
         end
       end
@@ -353,18 +355,18 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
         
         update_sale_state(sale, order)
 
-        attach_pdf_to_sale(sale, order) if SALE_STATE[order[:state]] == :invoice
+        attach_pdf_to_sale(sale, order[:invoice_debit]) if SALE_STATE[order[:state]] == :invoice
 
       end
 
-      # TODO
-      # If sale.state == "invoice" AND order with the same id as provider != invoice Cancel sale
-      
       # Update or Create incocoming payment
       order[:payment_links].each do |payment_link|
         create_update_or_delete_incoming_payment(sale, payment_link)
       end
 
+      # Cancel sale and attach invoice_credit
+      cancel_and_create_sale_credit(sale, order)
+ 
     else
       # TO REMOVE later / Create only 2 orders for testing
       sale = Sale.new(
@@ -391,12 +393,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
       update_sale_state(sale, order)
 
-      attach_pdf_to_sale(sale, order)
+      attach_pdf_to_sale(sale, order[:invoice_debit])
 
       # Update or Create incocoming payment
       order[:payment_links].each do |payment_link|
         create_update_or_delete_incoming_payment(sale, payment_link)
       end
+
+      # Cancel sale and attach invoice_credit
+      cancel_and_create_sale_credit(sale, order)
 
       sale
     end
@@ -479,7 +484,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       quantity: 1,
       pretax_amount: (shipping_line[:price_cents] / 100.0).to_d,
       amount: (shipping_line[:price_with_tax_cents] / 100.0).to_d,
-      compute_from: "pretax_amount",
+      compute_from: "amount",
       tax_id: tax_order.id
     )
   end
@@ -492,6 +497,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     sale.abort if SALE_STATE[order[:state]] == :aborted
     sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
     sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
+  end
+
+  def cancel_and_create_sale_credit(sale, order)
+    if !sale.credits.first.present? && order[:fulfillment_status] == "cancelled"
+      sale.cancel!
+      # TODO Add reference number
+      attach_pdf_to_sale(sale.credits.first, order[:invoice_credit])
+    end
   end
 
   def fetch_product_family_and_category_id(product_variant_id)
@@ -548,9 +561,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end
   end
 
-  def attach_pdf_to_sale(sale, order)
-    if !order[:invoice_debit].nil?
-      doc = Document.new(file: URI.open(order[:invoice_debit][:file_url].to_s), name: order[:invoice_debit][:name], file_file_name: order[:invoice_debit][:name] + ".pdf")
+  def attach_pdf_to_sale(sale, order_invoice)
+    if !order_invoice.nil?
+      doc = Document.new(file: URI.open(order_invoice[:file_url].to_s), name: order_invoice[:name], file_file_name: order_invoice[:name] + ".pdf")
       sale.attachments.create!(document: doc)
     end
   end
