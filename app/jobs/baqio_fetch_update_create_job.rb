@@ -23,6 +23,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     17  => "Matière première pour spiritueux"
   }
 
+  BAQIO_TAX_TYPE_TO_EKY = {
+    "standard" => "normal_vat", "intermediate" => "intermediate_vat", 
+    "reduced" => "reduced_vat", "exceptional" => "particular_vat"
+  }
+
   CATEGORY = "wine"
 
   BANK_ACCOUNT_PREFIX_NUMBER = "512201"
@@ -60,10 +65,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
           # select only order with date located in opened financial year
 
           list.select{ |order| max_date.max > order[:date].to_time && order[:date].to_time > min_date.min }.map do |order|
-
-              entity = find_or_create_entity(order)
-              create_or_update_sale(order, entity)
-
+            entity = find_or_create_entity(order)
+            create_or_update_sale(order, entity)
           end
         end
       end
@@ -448,6 +451,9 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def create_or_update_sale_items(sale, product_order, order)
+    # Find taxes to use at Eky
+    eky_tax = find_baqio_tax_to_eky(product_order, order)
+
     # Methode pour syncrhoniser les taxes
     tax_percentage = order[:tax_lines]
     tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
@@ -467,6 +473,30 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       compute_from: "pretax_amount",
       tax_id: tax_order.id
     )
+  end
+
+  def find_baqio_tax_to_eky(product_order, order)
+    if product_order[:tax_lines].present?
+      country_tax_id = product_order[:tax_lines].first[:country_tax_id].to_i
+
+      country_tax_baqio = Baqio::BaqioIntegration.fetch_country_taxes.execute do |c|
+                            c.success do |list|
+                              list.select{ |ct| ct[:id] == country_tax_id}.map do |country_tax|
+                                country_tax
+                              end
+                            end
+                          end
+
+      country_tax_code = country_tax_baqio.first[:code].downcase
+      country_tax_percentage = country_tax_baqio.first[:tax_percentage].to_f
+      country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio.first[:tax_type]]
+
+      return Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+
+    else
+      return Tax.find_by(nature: 'eu_vat', amount: 0.0) if order[:accounting_tax] == 'eu'
+      return Tax.find_by(nature: 'import_export_vat', amount: 0.0) if order[:accounting_tax] == 'world'
+    end 
   end
 
   def create_shipping_line_sale_item(sale, shipping_line, order)
