@@ -451,13 +451,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def create_or_update_sale_items(sale, product_order, order)
-    # Find taxes to use at Eky
     eky_tax = find_baqio_tax_to_eky(product_order, order)
-
-    # Methode pour syncrhoniser les taxes
-    tax_percentage = order[:tax_lines]
-    tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
-
     variant = find_or_create_variant(product_order)
     reduction_percentage = product_order[:total_discount_cents] == 0 ? 0 : (product_order[:total_discount_cents].to_f /  product_order[:final_price_cents].to_f) * 100
 
@@ -471,32 +465,42 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       pretax_amount: (product_order[:final_price_cents] / 100.0).to_d,
       amount: (product_order[:final_price_with_tax_cents] / 100.0).to_d,
       compute_from: "pretax_amount",
-      tax_id: tax_order.id
+      tax_id: eky_tax.id
     )
   end
 
   def find_baqio_tax_to_eky(product_order, order)
     if product_order[:tax_lines].present?
-      country_tax_id = product_order[:tax_lines].first[:country_tax_id].to_i
+      find_baqio_tax(product_order)
+      return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
 
-      country_tax_baqio = Baqio::BaqioIntegration.fetch_country_taxes.execute do |c|
-                            c.success do |list|
-                              list.select{ |ct| ct[:id] == country_tax_id}.map do |country_tax|
-                                country_tax
-                              end
-                            end
-                          end
+    elsif order[:accounting_tax] == 'fr' && !product_order[:tax_lines].present? && order[:tax_lines].present?
+      find_baqio_tax(order)
+      return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
 
-      country_tax_code = country_tax_baqio.first[:code].downcase
-      country_tax_percentage = country_tax_baqio.first[:tax_percentage].to_f
-      country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio.first[:tax_type]]
-
-      return Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+    elsif order[:accounting_tax] == 'fr' && !product_order[:tax_lines].present? && !order[:tax_lines].present?
+      return Tax.find_by(nature: "null_vat")
 
     else
       return Tax.find_by(nature: 'eu_vat', amount: 0.0) if order[:accounting_tax] == 'eu'
       return Tax.find_by(nature: 'import_export_vat', amount: 0.0) if order[:accounting_tax] == 'world'
     end 
+  end
+
+  def find_baqio_tax(product_order)
+    country_tax_id = product_order[:tax_lines].first[:country_tax_id].to_i
+
+    country_tax_baqio = Baqio::BaqioIntegration.fetch_country_taxes.execute do |c|
+                          c.success do |list|
+                            list.select{ |ct| ct[:id] == country_tax_id}.map do |country_tax|
+                              country_tax
+                            end
+                          end
+                        end
+
+    @country_tax_code = country_tax_baqio.first[:code].downcase
+    @country_tax_percentage = country_tax_baqio.first[:tax_percentage].to_f
+    @country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio.first[:tax_type]]
   end
 
   def create_shipping_line_sale_item(sale, shipping_line, order)
@@ -530,16 +534,15 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def cancel_and_create_sale_credit(sale, order)
-    if sale.credits.empty? && order[:fulfillment_status] == "cancelled"
+    if sale.credits.empty? && order[:state] == "cancelled"
       sale_credit = sale.build_credit
       sale_credit.reference_number = order[:invoice_credit][:name]
       sale_credit.provider = { 
                               vendor: VENDOR, 
                               name: "Baqio_order_invoice_credit", 
-                              data: { id: order[:invoice_credit][:id], order_id:  order[:invoice_credit][:order_id] } 
+                              data: { id: order[:invoice_credit][:id], order_id: order[:invoice_credit][:order_id] } 
                               }
       sale_credit.save!
-
       sale_credit.update!(created_at: order[:invoice_credit][:created_at].to_time)
       sale_credit.invoice!
 
