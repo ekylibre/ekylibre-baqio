@@ -530,10 +530,20 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def cancel_and_create_sale_credit(sale, order)
-    if !sale.credits.first.present? && order[:fulfillment_status] == "cancelled"
-      sale.cancel!
-      # TODO Add reference number
-      attach_pdf_to_sale(sale.credits.first, order[:invoice_credit])
+    if sale.credits.empty? && order[:fulfillment_status] == "cancelled"
+      sale_credit = sale.build_credit
+      sale_credit.reference_number = order[:invoice_credit][:name]
+      sale_credit.provider = { 
+                              vendor: VENDOR, 
+                              name: "Baqio_order_invoice_credit", 
+                              data: { id: order[:invoice_credit][:id], order_id:  order[:invoice_credit][:order_id] } 
+                              }
+      sale_credit.save!
+
+      sale_credit.update!(created_at: order[:invoice_credit][:created_at].to_time)
+      sale_credit.invoice!
+
+      attach_pdf_to_sale(sale_credit, order[:invoice_credit])
     end
   end
 
