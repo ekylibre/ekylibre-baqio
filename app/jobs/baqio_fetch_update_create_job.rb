@@ -471,11 +471,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   def find_baqio_tax_to_eky(product_order, order)
     if product_order[:tax_lines].present?
-      find_baqio_tax(product_order)
+      find_baqio_country_tax(product_order[:tax_lines])
       return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
 
     elsif order[:accounting_tax] == 'fr' && !product_order[:tax_lines].present? && order[:tax_lines].present?
-      find_baqio_tax(order)
+      find_baqio_country_tax(order[:tax_lines])
       return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
 
     elsif order[:accounting_tax] == 'fr' && !product_order[:tax_lines].present? && !order[:tax_lines].present?
@@ -487,8 +487,8 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     end 
   end
 
-  def find_baqio_tax(product_order)
-    country_tax_id = product_order[:tax_lines].first[:country_tax_id].to_i
+  def find_baqio_country_tax(tax_line)
+    country_tax_id = tax_line.first[:country_tax_id].to_i
 
     country_tax_baqio = Baqio::BaqioIntegration.fetch_country_taxes.execute do |c|
                           c.success do |list|
@@ -504,10 +504,17 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   def create_shipping_line_sale_item(sale, shipping_line, order)
-    # Methode pour syncrhoniser les taxes
-    tax_percentage = order[:tax_lines]
-    tax_order = tax_percentage.present? ? Tax.find_by(amount: tax_percentage.first[:tax_percentage]) : Tax.find_by(nature: "null_vat")
+    shipping_line_tax_price_cents = shipping_line[:price_with_tax_cents] - shipping_line[:price_cents]
+    # Find shipping_line tax_line throught order[:tax_line] with price_cents
+    shipping_line_tax_line = order[:tax_lines].select {|t| t[:price_cents] == shipping_line_tax_price_cents }
 
+    eky_tax = if shipping_line_tax_line.present?
+                find_baqio_country_tax(shipping_line_tax_line)
+                Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
+              else
+                Tax.find_by(nature: "null_vat")
+              end
+    
     variant = ProductNatureVariant.import_from_nomenclature(:carriage)
 
     sale.items.build(
@@ -516,10 +523,11 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       label: "#{shipping_line[:name]}",
       currency: shipping_line[:price_currency],
       quantity: 1,
+      unit_pretax_amount: (shipping_line[:price_cents] / 100.0).to_d,
       pretax_amount: (shipping_line[:price_cents] / 100.0).to_d,
       amount: (shipping_line[:price_with_tax_cents] / 100.0).to_d,
       compute_from: "amount",
-      tax_id: tax_order.id
+      tax_id: eky_tax.id
     )
   end
 
