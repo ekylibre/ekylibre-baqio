@@ -33,7 +33,7 @@ module Baqio
       parameter :api_secret
     end
 
-    calls :authentication_header, :fetch_payment_sources, :fetch_bank_informations, :fetch_family_product, :fetch_orders, :fetch_custumer, :fetch_product_variants, :fetch_country_taxes
+    calls :authentication_header, :fetch_payment_sources, :fetch_bank_informations, :fetch_family_product, :fetch_orders, :fetch_product_variants, :fetch_country_taxes
 
     # Build authentication header with api_key and password parameters
     #DOC https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json
@@ -80,14 +80,6 @@ module Baqio
       get_json(ORDERS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do
           list = JSON(r.body).map{|p| p.deep_symbolize_keys}
-        end
-      end
-    end
-
-    def fetch_custumer(customer_id)
-      get_json(ORDERS_URL + "/#{customer_id}", authentication_header) do |r|
-        r.success do
-          list = JSON(r.body)
         end
       end
     end
