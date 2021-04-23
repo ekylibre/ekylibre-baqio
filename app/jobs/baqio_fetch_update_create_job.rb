@@ -41,14 +41,12 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
     # Set page_with_ordres to ended the job if orders page is blank
     @page_with_orders = []
 
-    @init_category = ProductNatureCategory.find_by(reference_name: CATEGORY) || ProductNatureCategory.import_from_nomenclature(CATEGORY)
-
     @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_nomenclature(CATEGORY)
 
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
-      find_or_create_product_nature_category
-
+      pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR, category: CATEGORY)
+      pnc_handler.bulk_find_or_create
       # TODO call create or update cashes from baqio api
       create_or_update_cashe
 
@@ -230,42 +228,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
                 provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s} }
               )
             end
-          end
-        end
-      end
-    end
-  end
-
-
-  def find_or_create_product_nature_category
-    Baqio::BaqioIntegration.fetch_family_product.execute do |c|
-      c.success do |list|
-        list.map do |family_product|
-
-          product_nature_categories = ProductNatureCategory.of_provider_vendor(VENDOR).of_provider_data(:id, family_product[:id].to_s)
-
-          if product_nature_categories.any?
-            product_nature_categories.first
-          else
-            product_nature_category = ProductNatureCategory.find_or_initialize_by(name: family_product[:name])
-
-            product_nature_category.pictogram = @init_category.pictogram
-            product_nature_category.active = family_product[:displayed]
-            product_nature_category.depreciable = @init_category.depreciable
-            product_nature_category.saleable = @init_category.saleable
-            product_nature_category.purchasable = @init_category.purchasable
-            product_nature_category.storable = @init_category.storable
-            product_nature_category.reductible = @init_category.reductible
-            product_nature_category.subscribing = @init_category.subscribing
-            product_nature_category.product_account_id = @init_category.product_account_id
-            product_nature_category.stock_account_id = @init_category.stock_account_id
-            product_nature_category.fixed_asset_depreciation_percentage = @init_category.fixed_asset_depreciation_percentage
-            product_nature_category.fixed_asset_depreciation_method = @init_category.fixed_asset_depreciation_method
-            product_nature_category.stock_movement_account_id = @init_category.stock_movement_account_id
-            product_nature_category.type = @init_category.type
-            product_nature_category.provider = { vendor: VENDOR, name: "Baqio_product_family", data: {id: family_product[:id].to_s} }
-
-            product_nature_category.save!
           end
         end
       end
