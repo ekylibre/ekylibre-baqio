@@ -47,12 +47,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       # Create ProductNatureCategory and ProductNature from Baqio product_families
       pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR, category: CATEGORY)
       pnc_handler.bulk_find_or_create
+      
       # TODO call create or update cashes from baqio api
-      cash = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR)
-      cash.bulk_find_or_create
+      cash_handler = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR)
+      cash_handler.bulk_find_or_create
 
       # TODO create or update incoming_payment_mode from baqio api
-      create_or_update_incoming_payment_mode
+      incoming_payment_mode_handler = Integrations::Baqio::Handlers::IncomingPaymentModes.new(vendor: VENDOR)
+      incoming_payment_mode_handler.bulk_find_or_create
 
       # Create sales from baqio order's @page +=1)
       Baqio::BaqioIntegration.fetch_orders(@page +=1).execute do |c|
@@ -78,73 +80,6 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
   end
 
   private
-
-  # Create or find Cash with cash_box nature
-  def find_or_create_cash_box
-    account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(BAQIO_CASH_ACCOUNT_NUMBER)
-    cashes = Cash.cash_boxes.joins(:main_account).where(accounts: {number: account_number})
-    if cashes.any?
-      cashes.first
-    else
-      account = Account.create!(
-        number: account_number,
-        name: "Caisse Baqio"
-      )
-
-      journal = Journal.create!(
-        name: "Caisse Baqio",
-        nature: "cash",
-        code: "BQC1"
-      )
-
-      cash = Cash.create!(
-        name: "Caisse Baqio",
-        nature: "cash_box",
-        journal_id: journal.id,
-        main_account_id: account.id
-      )
-    end
-  end
-
-  # TODO create or update incoming_payment_mode from baqio api
-  def create_or_update_incoming_payment_mode
-    Baqio::BaqioIntegration.fetch_payment_sources.execute do |c|
-      c.success do |list|
-        list.select{ |c| c[:displayed] == true }.map do |payment_source|
-          incoming_payment_modes = IncomingPaymentMode.of_provider_vendor(VENDOR).of_provider_data(:id, payment_source[:id].to_s)
-
-          if incoming_payment_modes.any?
-            incoming_payment_mode = incoming_payment_modes.first
-          else
-            # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
-            if payment_source[:name] == "Espèces"
-              cash = find_or_create_cash_box
-            else
-
-            cash =  if payment_source[:bank_information_id].nil?
-                      Cash.of_provider_vendor(VENDOR).of_provider_data('primary', "true").first
-                    else
-                      Cash.of_provider_vendor(VENDOR).of_provider_data(:id, payment_source[:bank_information_id].to_s).first
-                    end
-
-            end
-
-            # TODO manage deposit with cash later
-            if !cash.nil?
-              incoming_payment_mode = IncomingPaymentMode.create!(
-                name: payment_source[:name],
-                cash_id: cash.id,
-                active: true,
-                with_accounting: true,
-                with_deposit: false,
-                provider: { vendor: VENDOR, name: "Baqio_payment_source", data: {id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s} }
-              )
-            end
-          end
-        end
-      end
-    end
-  end
 
   def find_or_create_entity(order)
     entities = Entity.of_provider_vendor(VENDOR).of_provider_data(:id, order[:customer][:id].to_s)
