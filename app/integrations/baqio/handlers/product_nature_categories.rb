@@ -27,7 +27,7 @@ module Integrations
 
         def create_product_nature_category(family_product)
           product_nature_category = ProductNatureCategory.find_or_initialize_by(name: family_product[:name])
-  
+          
           product_nature_category.pictogram = @init_category.pictogram
           product_nature_category.active = family_product[:displayed]
           product_nature_category.depreciable = @init_category.depreciable
