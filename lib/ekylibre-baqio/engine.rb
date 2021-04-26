@@ -8,8 +8,8 @@ module EkylibreBaqio
       app.config.i18n.load_path += Dir[EkylibreBaqio::Engine.root.join('config', 'locales', '**', '*.yml')]
     end
 
-    initializer :ekylibre_baqio_restfully_manageable do |app|
-      app.config.x.restfully_manageable.view_paths << EkylibreBaqio::Engine.root.join('app', 'views')
+    initializer :ekylibre_baqio_beehive do |app|
+      app.config.x.beehive.cell_controller_types << :last_sales_baqio
     end
   end
 end

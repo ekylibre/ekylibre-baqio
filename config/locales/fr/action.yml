@@ -6,3 +6,4 @@ fra:
     api_key: Clé API
     api_password: Mot de passe
     api_secret: Secret
+    last_sales_baqio: "Dernières ventes Baqio"
