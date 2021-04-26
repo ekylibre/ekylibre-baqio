@@ -1,19 +1,6 @@
 require 'rest-client'
 
 module Baqio
-  mattr_reader :default_options do
-    {
-      globals: {
-        strip_namespaces: true,
-        convert_response_tags_to: ->(tag) { tag.snakecase.to_sym },
-        raise_errors: true
-      },
-      locals: {
-        advanced_typecasting: true
-      }
-    }
-  end
-
   class ServiceError < StandardError; end
 
   class BaqioIntegration < ActionIntegration::Base
@@ -21,6 +8,11 @@ module Baqio
     BASE_URL = "https://demo.baqio.com/api/v1".freeze
     FAMILY_URL = BASE_URL + "/product_families"
     ORDERS_URL = BASE_URL + "/orders"
+    CUSTOMER_URL = BASE_URL + "/customers"
+    VARIANTS_URL = BASE_URL + "/product_variants"
+    PAYMENT_SOURCES_URL = BASE_URL + "/payment_sources"
+    BANK_INFORMATIONS_URL = BASE_URL + "/bank_informations"
+    COUNTRY_TAXES_URL = BASE_URL + "/country_taxes"
 
     authenticate_with :check do
       parameter :api_key
@@ -28,7 +20,7 @@ module Baqio
       parameter :api_secret
     end
 
-    calls :authentication_header, :fetch_family_product, :fetch_orders
+    calls :authentication_header, :fetch_payment_sources, :fetch_bank_informations, :fetch_family_product, :fetch_orders, :fetch_product_variants, :fetch_country_taxes
 
     # Build authentication header with api_key and password parameters
     #DOC https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json
@@ -37,6 +29,26 @@ module Baqio
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
       headers = {authorization: "Basic #{auth_encode}" ,content_type: :json, accept: :json}
+    end
+    
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
+    def fetch_payment_sources
+      # Call API
+      get_json(PAYMENT_SOURCES_URL, authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).map{|p| p.deep_symbolize_keys}
+        end
+      end
+    end
+
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/components/schemas/BankInformation
+    def fetch_bank_informations
+      # Call API
+      get_json(BANK_INFORMATIONS_URL, authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).map{|p| p.deep_symbolize_keys}
+        end
+      end
     end
 
     # GET recupérer la liste des familles de produits - OK
@@ -49,14 +61,35 @@ module Baqio
       end
     end
 
-    def fetch_orders
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1orders/get
+    def fetch_orders(page)
       # Call API
-      get_json(ORDERS_URL, authentication_header) do |r|
+      get_json(ORDERS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do
           list = JSON(r.body).map{|p| p.deep_symbolize_keys}
         end
       end
     end
+
+    def fetch_product_variants(product_variant_id)
+      get_json(VARIANTS_URL + "/#{product_variant_id}", authentication_header) do |r|
+        r.success do
+          list = JSON(r.body)
+        end
+      end
+    end
+
+    def fetch_country_taxes
+      # Call API
+      get_json(COUNTRY_TAXES_URL, authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).map{|p| p.deep_symbolize_keys}
+        end
+      end
+    end
+
+    # TODO fetch_incoming_payment_modes
+    # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
 
     # Check if the API is up
     def check(integration = nil)
