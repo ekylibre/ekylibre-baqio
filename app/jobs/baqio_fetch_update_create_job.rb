@@ -6,20 +6,14 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   VENDOR = 'baqio'
 
-  CATEGORY = "wine"
-
-  BANK_ACCOUNT_PREFIX_NUMBER = "512201"
-
-  BAQIO_CASH_ACCOUNT_NUMBER = 531201
-
   def perform
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
-      pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR, category: CATEGORY)
+      pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR)
       pnc_handler.bulk_find_or_create
 
       # TODO call create or update cashes from baqio api
-      cash_handler = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR, bank_account_prefix_number: BANK_ACCOUNT_PREFIX_NUMBER)
+      cash_handler = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR)
       cash_handler.bulk_find_or_create
 
       # TODO create or update incoming_payment_mode from baqio api

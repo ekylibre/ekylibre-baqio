@@ -4,11 +4,11 @@ module Integrations
   module Baqio 
     module Handlers
       class ProductNatureCategories
-        def initialize(vendor:, category:)
+
+        def initialize(vendor:)
           @vendor = vendor
           #TODO Check import
-          @init_category = ProductNatureCategory.find_by(reference_name: category) || 
-            ProductNatureCategory.import_from_nomenclature(category)
+          @init_category = ProductNatureCategory.import_from_nomenclature("wine")
         end
 
         def bulk_find_or_create

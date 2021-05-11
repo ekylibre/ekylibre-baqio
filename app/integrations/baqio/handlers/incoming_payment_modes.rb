@@ -4,6 +4,8 @@ module Integrations
   module Baqio 
     module Handlers
       class IncomingPaymentModes
+        BAQIO_CASH_ACCOUNT_NUMBER = 531201
+
         def initialize(vendor:)
           @vendor = vendor
         end

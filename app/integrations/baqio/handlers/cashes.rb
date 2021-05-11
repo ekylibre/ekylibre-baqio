@@ -4,10 +4,10 @@ module Integrations
   module Baqio 
     module Handlers
       class Cashes
-        def initialize(vendor:, bank_account_prefix_number:)
+        BANK_ACCOUNT_PREFIX_NUMBER = "512201"
+
+        def initialize(vendor:)
           @vendor = vendor
-          @bank_account_prefix_number = bank_account_prefix_number
-          #TODO Check import
         end
 
         def bulk_find_or_create
@@ -60,14 +60,14 @@ module Integrations
             account
           else
             # Select all Baqio account at Ekylibre
-            accounts = Account.select{ |a| a.number.first(4) == @bank_account_prefix_number.first(4) }
+            accounts = Account.select{ |a| a.number.first(4) == BANK_ACCOUNT_PREFIX_NUMBER.first(4) }
       
             # Select all account number with the first 6 number
             accounts_number_without_suffix =  accounts.map { |a| a.number[0..5].to_i }
       
             # For the first synch if there is no Baqio account at Ekylibre
             account_number_final =  if accounts_number_without_suffix.max.nil? 
-                                      @bank_account_prefix_number.to_i
+                                      BANK_ACCOUNT_PREFIX_NUMBER.to_i
                                     else
                                       accounts_number_without_suffix.max
                                     end
