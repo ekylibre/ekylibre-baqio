@@ -22,18 +22,14 @@ module Integrations
             data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result
 
             data_orders.each do |order|
-              if order[:id] == 233028
-                next if find_and_update_existant_sale(order).present?
+              next if find_and_update_existant_sale(order).present?
 
-                entity = find_or_create_entity(@vendor, order[:customer])
-                create_sale(order, entity)
-              end
-
+              entity = find_or_create_entity(@vendor, order[:customer])
+              create_sale(order, entity)
             end
 
             break if data_orders.blank? || @page == 50  
           end
-
         end
 
         private 
@@ -78,7 +74,7 @@ module Integrations
           sale.save!
           sale.update!(created_at: order[:created_at].to_time)
           sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
-          
+
           update_sale_state(sale, order)
           attach_pdf_to_sale(sale, order[:invoice_debit])
 

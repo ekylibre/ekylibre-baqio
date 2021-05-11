@@ -19,6 +19,9 @@ module Integrations
           list.map do |order|
             data_order = order.filter { |k, v| simple_desired_fields.include?(k) }
             data_order[:customer] = format_order_customer(order[:customer])
+            data_order[:order_lines_not_deleted] = format_order_lines_not_deleted(order[:order_lines_not_deleted])
+            data_order[:shipping_line] = format_order_shipping_line(order[:shipping_line])
+            data_order[:payment_links] = format_order_payment_sources(order[:payment_links])
             data_order
           end
         end
@@ -34,7 +37,7 @@ module Integrations
         end
 
         def simple_desired_fields
-          [:id, :name, :state, :date, :updated_at, :created_at, :shipping_line, :order_lines_not_deleted, :invoice_debit, :payment_links, :tax_lines, :accounting_tax ] 
+          [:id, :name, :state, :date, :updated_at, :created_at, :invoice_debit, :tax_lines, :accounting_tax ] 
         end
 
         def format_order_customer(order_customer)
@@ -51,8 +54,29 @@ module Integrations
 
 
         def format_order_lines_not_deleted(order_lines_not_deleted)
-          desired_fields = [:id, :account_id, :name]
-          order_lines_not_deleted.filter { |k, v| desired_fields.include?(k) }
+          order_lines_not_deleted.map do |order_line_not_deleted|
+            desired_fields = [:id, :name, :complement, :total_discount_cents, :final_price_cents, :price_currency, :quantity, :final_price_with_tax_cents, :tax_lines, :product_variant_id]
+            order_line_not_deleted.filter { |k, v| desired_fields.include?(k) }
+          end
+        end
+
+        def format_order_shipping_line(order_shipping_line)
+          desired_fields = [:id, :name, :price_currency, :price_with_tax_cents, :price_cents, :price_with_tax_cents]
+          order_shipping_line.filter { |k, v| desired_fields.include?(k) }
+        end
+
+        def format_order_payment_sources(order_payment_sources)
+          order_payment_sources.map do |order_payment_source|
+            desired_fields = [:id]
+            data = order_payment_source.filter { |k, v| desired_fields.include?(k) }
+            data[:payment] = format_order_payment_sources_payment(order_payment_source[:payment])
+            data
+          end
+        end
+
+        def format_order_payment_sources_payment(order_payment_sources_payment)
+          desired_fields = [:id, :payment_source_id, :amount_cents, :date, :amount_currency, :deleted_at]
+          order_payment_sources_payment.filter { |k, v| desired_fields.include?(k) }
         end
       end
     end
