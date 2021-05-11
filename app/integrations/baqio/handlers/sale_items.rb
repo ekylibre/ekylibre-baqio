@@ -16,7 +16,7 @@ module Integrations
           @order = order
         end
 
-        def bulk_find_or_create
+        def bulk_create
           if @order[:order_lines_not_deleted].present?
             @order[:order_lines_not_deleted].each do |order_line_not_deleted|
               create_sale_items(@sale, @order, order_line_not_deleted)
@@ -54,7 +54,6 @@ module Integrations
         def create_shipping_line_sale_item(sale, shipping_line, order)
           shipping_line_tax_price_cents = shipping_line[:price_with_tax_cents] - shipping_line[:price_cents]
           # Find shipping_line tax_line throught order[:tax_line] with price_cents
-          binding.pry
           shipping_line_tax_line = order[:tax_lines].select {|t| t[:price_cents] == shipping_line_tax_price_cents }
       
           eky_tax = if shipping_line_tax_line.present?
