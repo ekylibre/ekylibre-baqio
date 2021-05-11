@@ -21,7 +21,6 @@ module Baqio
     BASE_URL = "https://demo.baqio.com/api/v1".freeze
     FAMILY_URL = BASE_URL + "/product_families"
     ORDERS_URL = BASE_URL + "/orders"
-    CUSTOMER_URL = BASE_URL + "/customers"
     VARIANTS_URL = BASE_URL + "/product_variants"
     PAYMENT_SOURCES_URL = BASE_URL + "/payment_sources"
     BANK_INFORMATIONS_URL = BASE_URL + "/bank_informations"
