@@ -7,6 +7,8 @@ module Integrations
         def initialize(page_number)
           @formated_data = nil
           @page_number = page_number
+          @max_date = FinancialYear.where(state: "opened").map{ |date| date.stopped_on.to_time }
+          @min_date = FinancialYear.where(state: "opened").map{ |date| date.started_on.to_time }
         end
         
         def result
@@ -26,13 +28,13 @@ module Integrations
         def call_api
           ::Baqio::BaqioIntegration.fetch_orders(@page_number).execute do |c|
             c.success do |list|
-              format_data(list)
+              format_data(list.select { |order| @max_date.max > order[:date].to_time && order[:date].to_time > @min_date.min } )
             end
           end
         end
 
         def simple_desired_fields
-          [:id, :name, :state, :uptated_at, :shipping_line, :order_lines_not_deleted, :invoice_debit, :payment_links, :accounting_tax ] 
+          [:id, :name, :state, :date, :updated_at, :shipping_line, :order_lines_not_deleted, :invoice_debit, :payment_links, :accounting_tax ] 
         end
 
         def format_order_customer(order_customer)
