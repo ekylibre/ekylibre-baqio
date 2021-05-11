@@ -26,7 +26,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       incoming_payment_mode_handler = Integrations::Baqio::Handlers::IncomingPaymentModes.new(vendor: VENDOR)
       incoming_payment_mode_handler.bulk_find_or_create
 
-      sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR, category: CATEGORY)
+      sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR)
       sales.bulk_find_or_create
 
     rescue StandardError => error

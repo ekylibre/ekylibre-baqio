@@ -34,7 +34,7 @@ module Integrations
         end
 
         def simple_desired_fields
-          [:id, :name, :state, :date, :updated_at, :shipping_line, :order_lines_not_deleted, :invoice_debit, :payment_links, :accounting_tax ] 
+          [:id, :name, :state, :date, :updated_at, :created_at, :shipping_line, :order_lines_not_deleted, :invoice_debit, :payment_links, :tax_lines, :accounting_tax ] 
         end
 
         def format_order_customer(order_customer)

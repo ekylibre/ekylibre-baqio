@@ -87,7 +87,7 @@ module Baqio
     def fetch_product_variants(product_variant_id)
       get_json(VARIANTS_URL + "/#{product_variant_id}", authentication_header) do |r|
         r.success do
-          list = JSON(r.body)
+          list = JSON(r.body).deep_symbolize_keys
         end
       end
     end
