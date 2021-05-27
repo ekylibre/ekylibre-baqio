@@ -34,6 +34,8 @@ module Integrations
       
           if product_nature_variant.present?
             product_nature_variant
+          elsif order_line_not_deleted[:description] == "ZDISCOUNT"
+            create_product_nature_variant_discount_and_reduction(order_line_not_deleted)
           else
             # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
             product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
@@ -42,7 +44,7 @@ module Integrations
 
             product_nature = find_or_create_product_nature(product_nature_id)
             product_nature_category = ProductNatureCategory.of_provider_vendor(@vendor).of_provider_data(:id, product_category_id).first
-      
+            
             # Find or create new variant
             product_nature_variant =  ProductNatureVariant.create!(
               category_id: product_nature_category.id,
@@ -64,7 +66,7 @@ module Integrations
             product_nature
           else
             product_nature = ProductNature.find_or_initialize_by(name: PRODUCT_CATEGORY_BAQIO[product_nature_id.to_i])
-      
+            
             product_nature.variety = @init_product_nature.variety
             product_nature.derivative_of = @init_product_nature.derivative_of
             product_nature.reference_name = @init_product_nature.reference_name
@@ -79,6 +81,23 @@ module Integrations
       
             product_nature
           end
+        end
+
+        def create_product_nature_variant_discount_and_reduction(order_line_not_deleted)
+          init_product_nature_variant = ProductNatureVariant.import_from_nomenclature(:discount_and_reduction, true)
+          product_nature_variant = ProductNatureVariant.find_or_initialize_by(name: "#{order_line_not_deleted[:name]}Baqio")
+
+          product_nature_variant.category_id = init_product_nature_variant.category_id 
+          product_nature_variant.nature_id = init_product_nature_variant.nature_id
+          product_nature_variant.work_number = init_product_nature_variant.work_number
+          product_nature_variant.variety = init_product_nature_variant.variety
+          product_nature_variant.unit_name = init_product_nature_variant.unit_name
+          product_nature_variant.active = init_product_nature_variant.active
+          product_nature_variant.type = init_product_nature_variant.type
+          product_nature_variant.provider =  { vendor: @vendor, name: "Baqio_order_line_not_deleted_zdiscount", data: {id: order_line_not_deleted[:product_variant_id].to_s} }
+          product_nature_variant.save! 
+
+          product_nature_variant
         end
 
       end
