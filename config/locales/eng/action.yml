@@ -6,3 +6,4 @@ eng:
     api_key: API Key
     api_password: Password
     api_secret: Secret
+    last_sales_baqio: "Last Baqio sales"

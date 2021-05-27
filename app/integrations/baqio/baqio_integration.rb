@@ -1,19 +1,6 @@
 require 'rest-client'
 
 module Baqio
-  mattr_reader :default_options do
-    {
-      globals: {
-        strip_namespaces: true,
-        convert_response_tags_to: ->(tag) { tag.snakecase.to_sym },
-        raise_errors: true
-      },
-      locals: {
-        advanced_typecasting: true
-      }
-    }
-  end
-
   class ServiceError < StandardError; end
 
   class BaqioIntegration < ActionIntegration::Base
