@@ -72,7 +72,7 @@ module Integrations
         end
 
         def find_cash(payment_source)
-          if payment_source[:bank_information_id].nil?
+          if payment_source[:bank_information_id].nil? || payment_source[:name] == "Carte Bancaire (Stripe)"
             Cash.of_provider_vendor(@vendor).of_provider_data('primary', "true").first
           else
             Cash.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:bank_information_id].to_s).first
