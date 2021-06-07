@@ -24,14 +24,16 @@ module Integrations
           iban = bank_information[:iban].gsub(/\s+/, "")
           cash = Cash.find_by(iban: iban)
           
-          cash.update!(
-            name: bank_information[:domiciliation],
-            bank_name: bank_information[:domiciliation],
-            bank_identifier_code: bank_information[:bic],
-            bank_account_holder_name: bank_information[:owner],
-            by_default: bank_information[:primary],
-            provider: { vendor: @vendor, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
-          )
+          if cash.present?
+            cash.update!(
+              name: bank_information[:domiciliation],
+              bank_name: bank_information[:domiciliation],
+              bank_identifier_code: bank_information[:bic],
+              bank_account_holder_name: bank_information[:owner],
+              by_default: bank_information[:primary],
+              provider: { vendor: @vendor, name: "Baqio_bank_information", data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
+            )
+          end
         end
 
         def create_cash(bank_information)
