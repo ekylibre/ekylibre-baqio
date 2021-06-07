@@ -1,7 +1,7 @@
 module EkylibreBaqio
   class Engine < ::Rails::Engine
     initializer 'ekylibre_baqio.assets.precompile' do |app|
-      app.config.assets.precompile += %w(integrations/baqio.png)
+      app.config.assets.precompile += %w[integrations/baqio.png]
     end
 
     initializer :ekylibre_baqio_i18n do |app|

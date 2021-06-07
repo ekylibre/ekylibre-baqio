@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 module Integrations
-  module Baqio 
+  module Baqio
     module Handlers
       class IncomingPaymentModes
-        BAQIO_CASH_ACCOUNT_NUMBER = 531201
+        BAQIO_CASH_NUMBER = '531201'
 
         def initialize(vendor:)
           @vendor = vendor
@@ -13,71 +13,72 @@ module Integrations
         def bulk_find_or_create
           Integrations::Baqio::Data::PaymentSources.new.result.each do |payment_source|
             next if find_existant_incoming_payment_mode(payment_source).present?
-            
+
             create_incoming_payment_mode(payment_source)
           end
         end
 
-        private 
+        private
 
-        def find_existant_incoming_payment_mode(payment_source)
-          IncomingPaymentMode.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:id].to_s).first
-        end
-
-        def create_incoming_payment_mode(payment_source)
-          # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
-          cash =  if payment_source[:name] == "Espèces"
-                    find_or_create_cash_box
-                  else
-                    find_cash(payment_source)
-                  end
-
-          # TODO manage deposit with cash later
-          if cash.present?
-            incoming_payment_mode = IncomingPaymentMode.create!(
-              name: payment_source[:name],
-              cash_id: cash.id,
-              active: true,
-              with_accounting: true,
-              with_deposit: false,
-              provider: { vendor: @vendor, name: "Baqio_payment_source", data: {id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s} }
-            )
+          def find_existant_incoming_payment_mode(payment_source)
+            IncomingPaymentMode.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:id].to_s).first
           end
-        end
 
-        def find_or_create_cash_box
-          account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(BAQIO_CASH_ACCOUNT_NUMBER)
-          cashes = Cash.cash_boxes.joins(:main_account).where(accounts: {number: account_number})
-          if cashes.any?
-            cashes.first
-          else
-            account = Account.create!(
-              number: account_number,
-              name: "Caisse Baqio"
-            )
-      
-            journal = Journal.create!(
-              name: "Caisse Baqio",
-              nature: "cash",
-              code: "BQC1"
-            )
-      
-            cash = Cash.create!(
-              name: "Caisse Baqio",
-              nature: "cash_box",
-              journal_id: journal.id,
-              main_account_id: account.id
-            )
+          def create_incoming_payment_mode(payment_source)
+            # IF payment source == "Espèce" we need to use Cash "Caisse" or "Create it"
+            cash =  if payment_source[:name] == 'Espèces'
+                      find_or_create_cash_box
+                    else
+                      find_cash(payment_source)
+                    end
+
+            # TODO: manage deposit with cash later
+            if cash.present?
+              incoming_payment_mode = IncomingPaymentMode.create!(
+                name: payment_source[:name],
+                cash_id: cash.id,
+                active: true,
+                with_accounting: true,
+                with_deposit: false,
+                provider: { vendor: @vendor, name: 'Baqio_payment_source',
+  data: { id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s } }
+              )
+            end
           end
-        end
 
-        def find_cash(payment_source)
-          if payment_source[:bank_information_id].nil? || payment_source[:name] == "Carte Bancaire (Stripe)"
-            Cash.of_provider_vendor(@vendor).of_provider_data('primary', "true").first
-          else
-            Cash.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:bank_information_id].to_s).first
-          end         
-        end
+          def find_or_create_cash_box
+            account_number = Accountancy::AccountNumberNormalizer.build_deprecated_for_account_creation.normalize!(BAQIO_CASH_NUMBER.to_i)
+            cashes = Cash.cash_boxes.joins(:main_account).where(accounts: { number: account_number })
+            if cashes.any?
+              cashes.first
+            else
+              account = Account.create!(
+                number: account_number,
+                name: 'Caisse Baqio'
+              )
+
+              journal = Journal.create!(
+                name: 'Caisse Baqio',
+                nature: 'cash',
+                code: 'BQC1'
+              )
+
+              cash = Cash.create!(
+                name: 'Caisse Baqio',
+                nature: 'cash_box',
+                journal_id: journal.id,
+                main_account_id: account.id
+              )
+            end
+          end
+
+          def find_cash(payment_source)
+            if payment_source[:bank_information_id].nil? || payment_source[:name] == 'Carte Bancaire (Stripe)'
+              Cash.of_provider_vendor(@vendor).of_provider_data('primary', 'true').first
+            else
+              Cash.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:bank_information_id].to_s).first
+            end
+          end
 
       end
     end
