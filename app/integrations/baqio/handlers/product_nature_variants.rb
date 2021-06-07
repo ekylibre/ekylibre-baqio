@@ -40,8 +40,8 @@ module Integrations
             else
               # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
               product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
-              product_nature_id = product_variants[:product_category_id].to_s
-              product_category_id = product_variants[:product_family_id].to_s
+              product_nature_id = product_variants[:product][:product_category_id].to_s
+              product_category_id = product_variants[:product][:product_family_id].to_s
 
               product_nature = find_or_create_product_nature(product_nature_id)
               product_nature_category = ProductNatureCategory.of_provider_vendor(@vendor).of_provider_data(:id, product_category_id).first
