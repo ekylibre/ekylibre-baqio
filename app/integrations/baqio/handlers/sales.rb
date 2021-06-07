@@ -5,7 +5,7 @@ module Integrations
     module Handlers
       class Sales
 
-        SALE_STATE = {
+        BQ_STATE = {
           'draft' => :draft, 'pending' => :estimate,
           'validated' => :order, 'removed' => :aborted,
           'invoiced' => :invoice, 'cancelled' => :invoice
@@ -46,17 +46,17 @@ module Integrations
 
           def update_existant_sale(sale, order)
 
-            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != SALE_STATE[order[:state]] && sale.state != 'invoice'
+            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != BQ_STATE[order[:state]] && sale.state != 'invoice'
               # Delete all sale items and create new sale items
               sale.items.destroy_all
               create_sale_items(sale, order)
               # Update sale provider with new updated_at
               sale.provider = { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } }
-              sale.reference_number = order[:invoice_debit][:name] if SALE_STATE[order[:state]] == :invoice
+              sale.reference_number = order[:invoice_debit][:name] if BQ_STATE[order[:state]] == :invoice
               sale.save!
 
               update_sale_state(sale, order)
-              attach_pdf_to_sale(sale, order[:invoice_debit]) if SALE_STATE[order[:state]] == :invoice
+              attach_pdf_to_sale(sale, order[:invoice_debit]) if BQ_STATE[order[:state]] == :invoice
             end
 
             create_update_or_delete_incoming_payments(sale, order)
@@ -73,7 +73,7 @@ module Integrations
             create_sale_items(sale, order)
             sale.save!
             sale.update!(created_at: order[:created_at].to_time)
-            sale.update!(reference_number: order[:invoice_debit][:name]) if SALE_STATE[order[:state]] == :invoice
+            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state]] == :invoice
 
             update_sale_state(sale, order)
             attach_pdf_to_sale(sale, order[:invoice_debit])
@@ -98,16 +98,17 @@ module Integrations
           def update_sale_state(sale, order)
             order_date = Date.parse(order[:date]).to_time
 
-            sale.correct if SALE_STATE[order[:state]] == :aborted || :estimate
-            sale.propose if SALE_STATE[order[:state]] == :estimate || sale.items.present?
-            sale.abort if SALE_STATE[order[:state]] == :aborted
-            sale.confirm(order_date) if SALE_STATE[order[:state]] == :order
-            sale.invoice(order_date) if SALE_STATE[order[:state]] == :invoice
+            sale.correct if BQ_STATE[order[:state]] == :aborted
+            sale.correct if BQ_STATE[order[:state]] == :estimate
+            sale.propose if BQ_STATE[order[:state]] == :estimate || sale.items.present?
+            sale.abort if BQ_STATE[order[:state]] == :aborted
+            sale.confirm(order_date) if BQ_STATE[order[:state]] == :order
+            sale.invoice(order_date) if BQ_STATE[order[:state]] == :invoice
           end
 
           def attach_pdf_to_sale(sale, order_invoice)
             if !order_invoice.nil?
-              doc = Document.new(file: URI.open(order_invoice[:file_url].to_s), name: order_invoice[:name],
+              doc = Document.new(file: URI.parse(order_invoice[:file_url].to_s).open, name: order_invoice[:name],
   file_file_name: order_invoice[:name] + '.pdf')
               sale.attachments.create!(document: doc)
             end

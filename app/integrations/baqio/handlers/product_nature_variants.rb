@@ -30,8 +30,8 @@ module Integrations
         private
 
           def find_or_create_variant(order_line_not_deleted)
-            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id,
-                                                                                                       order_line_not_deleted[:product_variant_id].to_s).first
+            baqio_product_variant_id = order_line_not_deleted[:product_variant_id].to_s
+            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, baqio_product_variant_id).first
 
             if product_nature_variant.present?
               product_nature_variant
