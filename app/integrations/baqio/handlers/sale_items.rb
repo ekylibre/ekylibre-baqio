@@ -37,6 +37,7 @@ module Integrations
             variant = find_or_create_variant(order_line_not_deleted)
             calcul_reduction = (order_line_not_deleted[:total_discount_cents].to_f / order_line_not_deleted[:final_price_cents].to_f) * 100
             reduction_percentage = order_line_not_deleted[:total_discount_cents] == 0 ? 0 : calcul_reduction
+            pretax_amount = (order_line_not_deleted[:final_price_cents] / 100.0).to_f
 
             sale.items.build(
               sale_id: sale.id,
@@ -45,7 +46,8 @@ module Integrations
               currency: order_line_not_deleted[:price_currency],
               quantity: order_line_not_deleted[:quantity].to_d,
               reduction_percentage: reduction_percentage,
-              pretax_amount: (order_line_not_deleted[:final_price_cents] / 100.0).to_d,
+              unit_pretax_amount: (pretax_amount / order_line_not_deleted[:quantity].to_f).round(2),
+              pretax_amount: pretax_amount,
               amount: (order_line_not_deleted[:final_price_with_tax_cents] / 100.0).to_d,
               compute_from: 'pretax_amount',
               tax_id: eky_tax.id
