@@ -4,10 +4,6 @@ module Integrations
   module Baqio
     module Data
       class ProductFamilies
-        def initialize
-          @formated_data = nil
-        end
-
         def result
           @formated_data ||= call_api
         end

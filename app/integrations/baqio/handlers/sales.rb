@@ -6,9 +6,12 @@ module Integrations
       class Sales
 
         BQ_STATE = {
-          'draft' => :draft, 'pending' => :estimate,
-          'validated' => :order, 'removed' => :aborted,
-          'invoiced' => :invoice, 'cancelled' => :invoice
+          draft: :draft,
+          pending: :estimate,
+          validated: :order,
+          removed: :aborted,
+          invoiced: :invoice,
+          cancelled: :invoice
         }.freeze
 
         def initialize(vendor:)
@@ -45,18 +48,19 @@ module Integrations
           end
 
           def update_existant_sale(sale, order)
+            baqio_sale_state = BQ_STATE[order[:state].to_sym]
 
-            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != BQ_STATE[order[:state]] && sale.state != 'invoice'
+            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != baqio_sale_state && sale.state != 'invoice'
               # Delete all sale items and create new sale items
               sale.items.destroy_all
               create_sale_items(sale, order)
               # Update sale provider with new updated_at
               sale.provider = { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } }
-              sale.reference_number = order[:invoice_debit][:name] if BQ_STATE[order[:state]] == :invoice
+              sale.reference_number = order[:invoice_debit][:name] if baqio_sale_state == :invoice
               sale.save!
 
               update_sale_state(sale, order)
-              attach_pdf_to_sale(sale, order[:invoice_debit]) if BQ_STATE[order[:state]] == :invoice
+              attach_pdf_to_sale(sale, order[:invoice_debit]) if baqio_sale_state == :invoice
             end
 
             create_update_or_delete_incoming_payments(sale, order)
@@ -73,7 +77,7 @@ module Integrations
             create_sale_items(sale, order)
             sale.save!
             sale.update!(created_at: order[:created_at].to_time)
-            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state]] == :invoice
+            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state].to_sym] == :invoice
 
             update_sale_state(sale, order)
             attach_pdf_to_sale(sale, order[:invoice_debit])
@@ -97,13 +101,14 @@ module Integrations
 
           def update_sale_state(sale, order)
             order_date = Date.parse(order[:date]).to_time
+            baqio_sale_state = BQ_STATE[order[:state].to_sym]
 
-            sale.correct if BQ_STATE[order[:state]] == :aborted
-            sale.correct if BQ_STATE[order[:state]] == :estimate
-            sale.propose if BQ_STATE[order[:state]] == :estimate || sale.items.present?
-            sale.abort if BQ_STATE[order[:state]] == :aborted
-            sale.confirm(order_date) if BQ_STATE[order[:state]] == :order
-            sale.invoice(order_date) if BQ_STATE[order[:state]] == :invoice
+            sale.correct if baqio_sale_state == :aborted
+            sale.correct if baqio_sale_state == :estimate
+            sale.propose if baqio_sale_state == :estimate || sale.items.present?
+            sale.abort if baqio_sale_state == :aborted
+            sale.confirm(order_date) if baqio_sale_state == :order
+            sale.invoice(order_date) if baqio_sale_state == :invoice
           end
 
           def attach_pdf_to_sale(sale, order_invoice)

@@ -6,8 +6,10 @@ module Integrations
       class SaleItems
 
         BAQIO_TAX_TYPE_TO_EKY = {
-          'standard' => 'normal_vat', 'intermediate' => 'intermediate_vat',
-          'reduced' => 'reduced_vat', 'exceptional' => 'particular_vat'
+          standard: 'normal_vat',
+          intermediate: 'intermediate_vat',
+          reduced: 'reduced_vat',
+          exceptional: 'particular_vat'
         }.freeze
 
         def initialize(vendor:, sale:, order:)
@@ -123,7 +125,7 @@ module Integrations
 
             @country_tax_code = country_tax_baqio[:code].downcase
             @country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
-            @country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type]]
+            @country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
           end
 
           def find_or_create_variant(order_line_not_deleted)

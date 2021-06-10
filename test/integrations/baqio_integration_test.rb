@@ -5,7 +5,7 @@ class BaqioIntegrationTest < ::Ekylibre::Testing::ApplicationTestCase::WithFixtu
   setup do
     VCR.use_cassette('auth') do
       Integration.create(nature: 'baqio',
-parameters: { api_key: ENV['API_KEY'], api_password: ENV['API_PASSWORD'], api_secret: ENV['API_SECRET'] })
+parameters: { api_key: ENV['API_KEY'], api_password: ENV['API_PASSWORD'], api_secret: ENV['API_SECRET'], url: ENV['API_URL'] })
     end
   end
 

@@ -5,7 +5,6 @@ module Integrations
     module Data
       class Orders
         def initialize(page_number)
-          @formated_data = nil
           @page_number = page_number
           @max_date = FinancialYear.where(state: 'opened').map{ |date| date.stopped_on.to_time }
           @min_date = FinancialYear.where(state: 'opened').map{ |date| date.started_on.to_time }

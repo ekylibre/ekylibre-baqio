@@ -5,7 +5,6 @@ module Integrations
     module Data
       class ProductVariants
         def initialize(product_variant_id:)
-          @formated_data = nil
           @product_variant_id = product_variant_id
         end
 

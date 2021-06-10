@@ -5,7 +5,6 @@ module Integrations
     module Data
       class CountryTaxes
         def initialize(country_tax_id:)
-          @formated_data = nil
           @country_tax_id = country_tax_id
         end
 
