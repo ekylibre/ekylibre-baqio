@@ -3,8 +3,7 @@ Baqio::BaqioIntegration.on_check_success do
 end
 
 Baqio::BaqioIntegration.run every: :hour do
-  if Integration.find_by(nature: "baqio").present?
+  if Integration.find_by(nature: 'baqio').present?
     BaqioFetchUpdateCreateJob.perform_now
   end
 end
-  

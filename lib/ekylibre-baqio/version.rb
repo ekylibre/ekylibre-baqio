@@ -1,3 +1,3 @@
 module EkylibreBaqio
-  VERSION = "0.0.1".freeze
+  VERSION = '1.5'.freeze
 end
