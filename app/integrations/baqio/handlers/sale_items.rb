@@ -35,9 +35,8 @@ module Integrations
           def create_sale_items(sale, order, order_line_not_deleted)
             eky_tax = find_baqio_tax_to_eky(order_line_not_deleted, order)
             variant = find_or_create_variant(order_line_not_deleted)
-            calcul_reduction = (order_line_not_deleted[:total_discount_cents].to_f / order_line_not_deleted[:final_price_cents].to_f) * 100
-            reduction_percentage = order_line_not_deleted[:total_discount_cents] == 0 ? 0 : calcul_reduction
             pretax_amount = (order_line_not_deleted[:final_price_cents] / 100.0).to_f
+            reduction_percentage = compute_reduction_percentage(order_line_not_deleted)
 
             sale.items.build(
               sale_id: sale.id,
@@ -82,6 +81,18 @@ module Integrations
             )
           end
 
+          def compute_reduction_percentage(order_line_not_deleted)
+            compute_reduction = (order_line_not_deleted[:total_discount_cents].to_f / order_line_not_deleted[:final_price_cents].to_f) * 100
+
+            if order_line_not_deleted[:final_price_cents].zero? && !order_line_not_deleted[:total_discount_cents].zero?
+              100
+            elsif order_line_not_deleted[:total_discount_cents] == 0
+              0
+            else
+              compute_reduction
+            end
+          end
+
           def find_baqio_tax_to_eky(order_line_not_deleted, order)
             if order_line_not_deleted[:tax_lines].present?
               find_baqio_country_tax(order_line_not_deleted[:tax_lines])
@@ -92,6 +103,9 @@ module Integrations
               return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
 
             elsif order[:accounting_tax] == 'fr' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+              return Tax.find_by(nature: 'null_vat')
+
+            elsif order[:accounting_tax] == 'fr_susp' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'null_vat')
 
             else

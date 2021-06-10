@@ -5,12 +5,12 @@ module Baqio
 
   class BaqioIntegration < ActionIntegration::Base
     # Set url needed for Baqio API v2
-    FAMILY_URL = '/product_families'
-    ORDERS_URL = '/orders'
-    VARIANTS_URL = '/product_variants'
-    PAYMENT_SOURCES_URL = '/payment_sources'
-    BANK_INFORMATIONS_URL = '/bank_informations'
-    COUNTRY_TAXES_URL = '/country_taxes'
+    FAMILY_URL = '/product_families'.freeze
+    ORDERS_URL = '/orders'.freeze
+    VARIANTS_URL = '/product_variants'.freeze
+    PAYMENT_SOURCES_URL = '/payment_sources'.freeze
+    BANK_INFORMATIONS_URL = '/bank_informations'.freeze
+    COUNTRY_TAXES_URL = '/country_taxes'.freeze
 
     authenticate_with :check do
       parameter :url

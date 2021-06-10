@@ -115,7 +115,7 @@ module Integrations
           end
 
           def cancel_and_create_sale_credit(sale, order)
-            if sale.credits.empty? && order[:state] == 'cancelled'
+            if sale.credits.empty? && order[:state] == 'cancelled' && !order[:total_price_cents].zero?
               sale_credit = sale.build_credit
               sale_credit.reference_number = order[:invoice_credit][:name]
               sale_credit.provider = {
