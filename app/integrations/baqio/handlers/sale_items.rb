@@ -108,6 +108,9 @@ module Integrations
             elsif order[:accounting_tax] == 'fr_susp' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'null_vat')
 
+            elsif order[:accounting_tax] == 'BE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+              return Tax.find_by(nature: 'eu_vat', amount: 0.0)
+
             else
               return Tax.find_by(nature: 'eu_vat', amount: 0.0) if order[:accounting_tax] == 'eu'
               return Tax.find_by(nature: 'import_export_vat', amount: 0.0) if order[:accounting_tax] == 'world'
