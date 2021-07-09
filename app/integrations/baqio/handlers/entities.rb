@@ -34,6 +34,7 @@ module Integrations
               first_name: order_customer[:billing_information][:first_name],
               last_name: custom_name,
               client: true,
+              country: order_customer[:billing_information][:country_code].lower,
               provider: {
                     vendor: @vendor,
                     name: 'Baqio_order_customer',
@@ -52,9 +53,15 @@ module Integrations
               order_customer[:billing_information][:zip]
             )
 
+            country_code =  if order_customer[:billing_information][:country_code].present?
+                              order_customer[:billing_information][:country_code].lower
+                            else
+                              'fr'
+                            end
+
             entity_addresses = Array.new([
               { mobile: order_customer[:billing_information][:mobile] },
-              { zip_city: zip_city, mail: order_customer[:billing_information][:address1] },
+              { zip_city: zip_city, country_code: country_code, mail: order_customer[:billing_information][:address1] },
               { email: order_customer[:billing_information][:email] },
               { website: order_customer[:billing_information][:website] }
             ])
@@ -67,7 +74,8 @@ module Integrations
                     entity_id: entity.id,
                     canal: 'mail',
                     mail_line_4: entity_address[:mail],
-                    mail_line_6: entity_address[:zip_city]
+                    mail_line_6: entity_address[:zip_city],
+                    mail_country:  entity_address[:country_code]
                   )
                 else
                   EntityAddress.create!(
