@@ -47,7 +47,7 @@ module Integrations
           end
 
           def format_order_customer_billing_information(billing_information)
-            desired_fields = %i[first_name last_name company_name city zip mobile address1 email website]
+            desired_fields = %i[first_name last_name company_name city zip mobile address1 email website country_code]
             billing_information.filter { |k, _v| desired_fields.include?(k) }
           end
 
