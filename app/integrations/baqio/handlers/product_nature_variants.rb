@@ -15,12 +15,12 @@ module Integrations
           17  => 'Matière première pour spiritueux'
         }.freeze
 
-        CATEGORY = 'wine'
+        CATEGORY = :wine
 
         def initialize(vendor:, order_line_not_deleted:)
           @vendor = vendor
           @order_line_not_deleted = order_line_not_deleted
-          @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_nomenclature(CATEGORY)
+          @init_product_nature = ProductNature.find_by(reference_name: CATEGORY) || ProductNature.import_from_lexicon(CATEGORY)
         end
 
         def bulk_find_or_create
@@ -89,7 +89,7 @@ data: { id: order_line_not_deleted[:product_variant_id].to_s } }
           end
 
           def create_product_nature_variant_discount_and_reduction(order_line_not_deleted)
-            init_product_nature_variant = ProductNatureVariant.import_from_nomenclature(:discount_and_reduction, true)
+            init_product_nature_variant = ProductNatureVariant.import_from_lexicon(:purchase_discount_and_reduction, true)
             product_nature_variant = ProductNatureVariant.find_or_initialize_by(name: "#{order_line_not_deleted[:name]}Baqio")
 
             product_nature_variant.category_id = init_product_nature_variant.category_id

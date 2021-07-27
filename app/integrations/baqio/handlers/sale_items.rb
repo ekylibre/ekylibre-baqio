@@ -67,7 +67,7 @@ module Integrations
                         Tax.find_by(nature: 'null_vat')
                       end
 
-            variant = ProductNatureVariant.import_from_nomenclature(:carriage)
+            variant = ProductNatureVariant.import_from_lexicon(:transportation)
 
             sale.items.build(
               sale_id: sale.id,
