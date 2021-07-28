@@ -12,6 +12,8 @@ module Integrations
           exceptional: 'particular_vat'
         }.freeze
 
+        EU_CT_CODE = %w[BE DE DK].freeze
+
         def initialize(vendor:, sale:, order:)
           @vendor = vendor
           @sale = sale
@@ -97,12 +99,10 @@ module Integrations
 
           def find_baqio_tax_to_eky(order_line_not_deleted, order)
             if order_line_not_deleted[:tax_lines].present?
-              find_baqio_country_tax(order_line_not_deleted[:tax_lines])
-              return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
+              return find_or_create_baqio_country_tax(order_line_not_deleted[:tax_lines])
 
             elsif order[:accounting_tax] == 'fr' && !order_line_not_deleted[:tax_lines].present? && order[:tax_lines].present?
-              find_baqio_country_tax(order[:tax_lines])
-              return Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
+              return find_or_create_baqio_country_tax(order[:tax_lines])
 
             elsif order[:accounting_tax] == 'fr' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'null_vat')
@@ -110,10 +110,10 @@ module Integrations
             elsif order[:accounting_tax] == 'fr_susp' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'null_vat')
 
-            elsif order[:accounting_tax] == 'BE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
-              return Tax.find_by(nature: 'eu_vat', amount: 0.0)
+            elsif order[:accounting_tax] == 'GB' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+              return Tax.find_by(nature: 'import_export_vat', amount: 0.0)
 
-            elsif order[:accounting_tax] == 'DE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+            elsif EU_CT_CODE.include?(order[:accounting_tax]) && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'eu_vat', amount: 0.0)
 
             else
@@ -122,13 +122,23 @@ module Integrations
             end
           end
 
-          def find_baqio_country_tax(tax_line)
+          def find_or_create_baqio_country_tax(tax_line)
             country_tax_id = tax_line.first[:country_tax_id].to_i
             country_tax_baqio = Integrations::Baqio::Data::CountryTaxes.new(country_tax_id: country_tax_id).result.first
 
-            @country_tax_code = country_tax_baqio[:code].downcase
-            @country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
-            @country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
+            country_tax_code = country_tax_baqio[:code].downcase
+            country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
+            country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
+
+            baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+
+            if baqio_tax.present?
+              baqio_tax
+            else
+              # Import all tax from onoma with country_tax_code (eg: "fr", "dk")
+              Tax.import_all_from_nomenclature(country: country_tax_code)
+              return Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+            end
           end
 
           def find_or_create_variant(order_line_not_deleted)
