@@ -67,7 +67,7 @@ module Integrations
                         Tax.find_by(nature: 'null_vat')
                       end
 
-            variant = ProductNatureVariant.import_from_nomenclature(:carriage)
+            variant = ProductNatureVariant.import_from_lexicon(:transportation)
 
             sale.items.build(
               sale_id: sale.id,
@@ -111,6 +111,9 @@ module Integrations
               return Tax.find_by(nature: 'null_vat')
 
             elsif order[:accounting_tax] == 'BE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+              return Tax.find_by(nature: 'eu_vat', amount: 0.0)
+
+            elsif order[:accounting_tax] == 'DE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
               return Tax.find_by(nature: 'eu_vat', amount: 0.0)
 
             else
