@@ -118,7 +118,7 @@ module Integrations
 
             elsif order[:accounting_tax] == 'eu'
               Tax.find_by(nature: 'eu_vat', amount: 0.0)
-            
+
             elsif order[:accounting_tax] == 'world'
               Tax.find_by(nature: 'import_export_vat', amount: 0.0)
             end
