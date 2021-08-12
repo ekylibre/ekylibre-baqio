@@ -99,26 +99,28 @@ module Integrations
 
           def find_baqio_tax_to_eky(order_line_not_deleted, order)
             if order_line_not_deleted[:tax_lines].present?
-              return find_or_create_baqio_country_tax(order_line_not_deleted[:tax_lines])
+              find_or_create_baqio_country_tax(order_line_not_deleted[:tax_lines])
 
-            elsif order[:accounting_tax] == 'fr' && !order_line_not_deleted[:tax_lines].present? && order[:tax_lines].present?
-              return find_or_create_baqio_country_tax(order[:tax_lines])
+            elsif order[:accounting_tax] == 'fr' && order[:tax_lines].present?
+              find_or_create_baqio_country_tax(order[:tax_lines])
 
-            elsif order[:accounting_tax] == 'fr' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
-              return Tax.find_by(nature: 'null_vat')
+            elsif order[:accounting_tax] == 'fr' && !order[:tax_lines].present?
+              Tax.find_by(nature: 'null_vat')
 
-            elsif order[:accounting_tax] == 'fr_susp' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
-              return Tax.find_by(nature: 'null_vat')
+            elsif order[:accounting_tax] == 'fr_susp' && !order[:tax_lines].present?
+              Tax.find_by(nature: 'null_vat')
 
-            elsif order[:accounting_tax] == 'GB' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
-              return Tax.find_by(nature: 'import_export_vat', amount: 0.0)
+            elsif order[:accounting_tax] == 'GB' && !order[:tax_lines].present?
+              Tax.find_by(nature: 'import_export_vat', amount: 0.0)
 
-            elsif EU_CT_CODE.include?(order[:accounting_tax]) && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
-              return Tax.find_by(nature: 'eu_vat', amount: 0.0)
+            elsif EU_CT_CODE.include?(order[:accounting_tax]) && !order[:tax_lines].present?
+              Tax.find_by(nature: 'eu_vat', amount: 0.0)
 
-            else
-              return Tax.find_by(nature: 'eu_vat', amount: 0.0) if order[:accounting_tax] == 'eu'
-              return Tax.find_by(nature: 'import_export_vat', amount: 0.0) if order[:accounting_tax] == 'world'
+            elsif order[:accounting_tax] == 'eu'
+              Tax.find_by(nature: 'eu_vat', amount: 0.0)
+            
+            elsif order[:accounting_tax] == 'world'
+              Tax.find_by(nature: 'import_export_vat', amount: 0.0)
             end
           end
 
@@ -137,7 +139,7 @@ module Integrations
             else
               # Import all tax from onoma with country_tax_code (eg: "fr", "dk")
               Tax.import_all_from_nomenclature(country: country_tax_code)
-              return Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+              Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
             end
           end
 
