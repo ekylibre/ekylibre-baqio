@@ -13,7 +13,7 @@ module Baqio
     COUNTRY_TAXES_URL = '/country_taxes'.freeze
 
     authenticate_with :check do
-      parameter :url
+      parameter :baqio_web_address
       parameter :api_key
       parameter :api_password
       parameter :api_secret
@@ -24,7 +24,7 @@ module Baqio
 
     def base_url
       integration = fetch integration
-      "https://#{integration.parameters['url']}/api/v1".freeze
+      "https://#{integration.parameters['baqio_web_address']}/api/v1".freeze
     end
 
     # Build authentication header with api_key and password parameters
