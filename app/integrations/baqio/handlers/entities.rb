@@ -27,8 +27,6 @@ module Integrations
 
             custom_name = if billing_information[:last_name].nil? && billing_information[:company_name].present?
                             billing_information[:company_name]
-                          elsif billing_information[:company_name].nil?
-                            order_customer[:name]
                           else
                             order_customer[:name]
                           end
