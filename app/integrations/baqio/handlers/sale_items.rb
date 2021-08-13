@@ -113,6 +113,7 @@ module Integrations
             elsif order[:accounting_tax] == 'GB' && !order[:tax_lines].present?
               Tax.find_by(nature: 'import_export_vat', amount: 0.0)
 
+<<<<<<< HEAD
             elsif EU_CT_CODE.include?(order[:accounting_tax]) && !order[:tax_lines].present?
               Tax.find_by(nature: 'eu_vat', amount: 0.0)
 
@@ -121,6 +122,14 @@ module Integrations
 
             elsif order[:accounting_tax] == 'world'
               Tax.find_by(nature: 'import_export_vat', amount: 0.0)
+=======
+            elsif order[:accounting_tax] == 'DE' && !order_line_not_deleted[:tax_lines].present? && !order[:tax_lines].present?
+              return Tax.find_by(nature: 'eu_vat', amount: 0.0)
+
+            else
+              return Tax.find_by(nature: 'eu_vat', amount: 0.0) if order[:accounting_tax] == 'eu'
+              return Tax.find_by(nature: 'import_export_vat', amount: 0.0) if order[:accounting_tax] == 'world'
+>>>>>>> 4e5b9907be937419436da9585c1c7802b33dab62
             end
           end
 
