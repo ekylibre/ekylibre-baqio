@@ -23,18 +23,20 @@ module Integrations
 
           def create_entity(order_customer)
             # TO REMOVE later / Create only 2 orders for testing
-            custom_name = if order_customer[:billing_information][:last_name].nil?
-                            order_customer[:billing_information][:company_name]
+            billing_information = order_customer[:billing_information]
+
+            custom_name = if billing_information[:last_name].nil? && billing_information[:company_name].present?
+                            billing_information[:company_name]
                           else
                             order_customer[:name]
                           end
             # TODO: check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
             # Need API update from Baqio, method customer/id doesn't work
             entity = Entity.create!(
-              first_name: order_customer[:billing_information][:first_name],
+              first_name: billing_information[:first_name],
               last_name: custom_name,
               client: true,
-              country: order_customer[:billing_information][:country_code].lower,
+              country: billing_information[:country_code].lower,
               provider: {
                     vendor: @vendor,
                     name: 'Baqio_order_customer',
