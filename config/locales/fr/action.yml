@@ -3,7 +3,6 @@ fra:
     baqio_short_description: Logiciel de gestion commerciale
     baqio_long_description:  Baqio est un logiciel de gestion commerciale spécialisé vin et alcool qui automatise l'administratif
     baqio_url: https://www.baqio.com/
-    baqio_web_address: Url
     api_key: Clé API
     api_password: Mot de passe
     api_secret: Secret
