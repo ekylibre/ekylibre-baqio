@@ -63,8 +63,7 @@ module Integrations
             shipping_line_tax_line = order[:tax_lines].select {|t| t[:price_cents] == shipping_line_tax_price_cents }
 
             eky_tax = if shipping_line_tax_line.present?
-                        find_baqio_country_tax(shipping_line_tax_line)
-                        Tax.find_by(country: @country_tax_code, amount: @country_tax_percentage, nature: @country_tax_type)
+                        find_or_create_baqio_country_tax(shipping_line_tax_line)
                       else
                         Tax.find_by(nature: 'null_vat')
                       end
