@@ -61,10 +61,12 @@ module Integrations
                               'fr'
                             end
 
+            baqio_email = order_customer[:billing_information][:email]
+
             entity_addresses = Array.new([
               { mobile: order_customer[:billing_information][:mobile] },
               { zip_city: zip_city, country_code: country_code, mail: order_customer[:billing_information][:address1] },
-              { email: order_customer[:billing_information][:email] },
+              { email: is_email_valid?(baqio_email) ? baqio_email : nil },
               { website: order_customer[:billing_information][:website] }
             ])
 
@@ -88,6 +90,10 @@ module Integrations
                 end
               end
             end
+          end
+
+          def is_email_valid?(email)
+            email =~/\A([^@\s]+)@((?:[-a-z0-9]+\.)+[a-z]{2,})\z/i
           end
 
           def build_address_cz(city, zip)
