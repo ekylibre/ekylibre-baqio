@@ -112,7 +112,7 @@ module Integrations
           end
 
           def attach_pdf_to_sale(sale, order_invoice)
-            if !order_invoice.nil?
+            if order_invoice.present? && order_invoice[:file_url].present? && order_invoice[:name].present?
               doc = Document.new(file: URI.parse(order_invoice[:file_url].to_s).open, name: order_invoice[:name],
   file_file_name: order_invoice[:name] + '.pdf')
               sale.attachments.create!(document: doc)

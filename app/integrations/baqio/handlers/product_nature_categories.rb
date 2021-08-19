@@ -8,7 +8,7 @@ module Integrations
         def initialize(vendor:)
           @vendor = vendor
           # TODO: Check import
-          @init_category = ProductNatureCategory.import_from_nomenclature('wine')
+          @init_category = ProductNatureCategory.import_from_lexicon(:processed_product)
         end
 
         def bulk_find_or_create

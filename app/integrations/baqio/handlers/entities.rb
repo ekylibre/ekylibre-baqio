@@ -23,18 +23,20 @@ module Integrations
 
           def create_entity(order_customer)
             # TO REMOVE later / Create only 2 orders for testing
-            custom_name = if order_customer[:billing_information][:last_name].nil?
-                            order_customer[:billing_information][:company_name]
+            billing_information = order_customer[:billing_information]
+
+            custom_name = if billing_information[:last_name].nil? && billing_information[:company_name].present?
+                            billing_information[:company_name]
                           else
                             order_customer[:name]
                           end
             # TODO: check and add custom nature (ex: Customer "Particulier" at Baqio become "Contact" nature at Ekylibre)
             # Need API update from Baqio, method customer/id doesn't work
             entity = Entity.create!(
-              first_name: order_customer[:billing_information][:first_name],
+              first_name: billing_information[:first_name],
               last_name: custom_name,
               client: true,
-              country: order_customer[:billing_information][:country_code].lower,
+              country: billing_information[:country_code].lower,
               provider: {
                     vendor: @vendor,
                     name: 'Baqio_order_customer',
@@ -59,10 +61,12 @@ module Integrations
                               'fr'
                             end
 
+            baqio_email = order_customer[:billing_information][:email]
+
             entity_addresses = Array.new([
               { mobile: order_customer[:billing_information][:mobile] },
               { zip_city: zip_city, country_code: country_code, mail: order_customer[:billing_information][:address1] },
-              { email: order_customer[:billing_information][:email] },
+              { email: is_email_valid?(baqio_email) ? baqio_email : nil },
               { website: order_customer[:billing_information][:website] }
             ])
 
@@ -86,6 +90,10 @@ module Integrations
                 end
               end
             end
+          end
+
+          def is_email_valid?(email)
+            email =~/\A([^@\s]+)@((?:[-a-z0-9]+\.)+[a-z]{2,})\z/i
           end
 
           def build_address_cz(city, zip)
