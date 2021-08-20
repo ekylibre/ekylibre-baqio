@@ -11,8 +11,18 @@
       }
     }
 
+    function disabledBaqioIntegrationButton() {
+      const element = document.querySelector('.notification_body')
+
+      if (element.innerText.includes('Baqio')) {
+        const formActions = document.querySelector(".form-actions")
+        formActions.querySelector("input").disabled = true
+      }
+    }
+
     E.onDomReady(function () {
-      handleSelectBaqioUrl() 
+      handleSelectBaqioUrl()
+      disabledBaqioIntegrationButton()
     })
 
 })(ekylibre)

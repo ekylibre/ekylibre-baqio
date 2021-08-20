@@ -7,3 +7,5 @@ fra:
     api_password: Mot de passe
     api_secret: Secret
     last_sales_baqio: "Dernières ventes Baqio"
+    financial_year_exchange_open_baqio_integration: "Un échange comptable est actuellement ouvert. Vous ne pouvez donc pas synchroniser vos ventes Baqio."
+    financial_year_exchange_open_baqio: "La synchronisation des ventes Baqio ne pourra être faite tant que l'échange comptable sera ouvert"
