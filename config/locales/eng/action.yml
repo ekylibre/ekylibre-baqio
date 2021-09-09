@@ -2,8 +2,11 @@ eng:
   labels:
     baqio_short_description: Software business management
     baqio_long_description:  Baqio is a specialized wine and alcohol business management software that automates the administrative
+    baqio_synchronisation: Updating Baqio sales
     baqio_url: https://www.baqio.com/
     api_key: API Key
     api_password: Password
     api_secret: Secret
+    correct_baqio_fetch_params: "Baqio synchronisation is over, New sales are available in Ekylibre."
+    failed_baqio_fetch_params: "An error occured during Baqio synchronisation."
     last_sales_baqio: "Last Baqio sales"

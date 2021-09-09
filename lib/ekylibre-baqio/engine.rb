@@ -24,5 +24,17 @@ module EkylibreBaqio
       end
     end
 
+    initializer :ekylibre_baqio_import_stylesheets do
+      tmp_file = Rails.root.join('tmp', 'plugins', 'theme-addons', 'themes', 'tekyla', 'plugins.scss')
+      tmp_file.open('a') do |f|
+        import = '@import "baqio/tekyla/main.scss";'
+        f.puts(import) unless tmp_file.open('r').read.include?(import)
+      end
+    end
+
+    initializer :add_baqio_partials do |_app|
+      Ekylibre::View::Addon.add(:extensions_content_top, 'backend/sales/synchro', to: 'backend/sales#index')
+    end
+
   end
 end

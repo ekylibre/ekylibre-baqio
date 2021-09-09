@@ -1,0 +1,16 @@
+@keyframes bqspinner {
+  to {transform: rotate(360deg);}
+}
+ 
+.bqspinner:before {
+  content: '';
+  box-sizing: border-box;
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-left: 5px;
+  border: 1px solid #ccc;
+  border-top-color: #07d;
+  animation: spinner .6s linear infinite;
+}
