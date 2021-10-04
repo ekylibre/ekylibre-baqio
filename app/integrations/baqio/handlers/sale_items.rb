@@ -42,6 +42,16 @@ module Integrations
             pretax_amount = (order_line_not_deleted[:final_price_cents] / 100.0).to_f
             reduction_percentage = compute_reduction_percentage(order_line_not_deleted)
 
+            product_variant = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
+
+            conditioning_unit = if product_variant[:product][:kind] == 'standard'
+                                  find_or_create_conditionning(product_variant[:product_size])
+                                elsif product_variant[:product][:kind] == 'other'
+                                  Unit.import_from_lexicon('unity')
+                                elsif product_variant[:product][:kind] == 'pack'
+                                  # TODO : manage product variant 'pack'
+                                end
+
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
@@ -53,8 +63,11 @@ module Integrations
               pretax_amount: pretax_amount,
               amount: (order_line_not_deleted[:final_price_with_tax_cents] / 100.0).to_d,
               compute_from: 'pretax_amount',
-              tax_id: eky_tax.id
+              tax_id: eky_tax.id,
+              conditioning_unit_id: conditioning_unit.id,
+              conditioning_quantity: order_line_not_deleted[:quantity].to_d
             )
+
           end
 
           def create_shipping_line_sale_item(sale, shipping_line, order)
@@ -69,6 +82,7 @@ module Integrations
                       end
 
             variant = ProductNatureVariant.import_from_lexicon(:transportation)
+            conditioning_unit = Unit.import_from_lexicon('unity')
 
             sale.items.build(
               sale_id: sale.id,
@@ -80,8 +94,11 @@ module Integrations
               pretax_amount: (shipping_line[:price_cents] / 100.0).to_d,
               amount: (shipping_line[:price_with_tax_cents] / 100.0).to_d,
               compute_from: 'amount',
-              tax_id: eky_tax.id
+              tax_id: eky_tax.id,
+              conditioning_unit_id: conditioning_unit.id,
+              conditioning_quantity: 1
             )
+
           end
 
           def compute_reduction_percentage(order_line_not_deleted)
@@ -146,6 +163,27 @@ module Integrations
             variant = Integrations::Baqio::Handlers::ProductNatureVariants.new(vendor: @vendor,
   order_line_not_deleted: order_line_not_deleted)
             variant.bulk_find_or_create
+          end
+
+          def fetch_baqio_product_variants(product_variant_id)
+            Integrations::Baqio::Data::ProductVariants.new(product_variant_id: product_variant_id).result
+          end
+
+          def find_or_create_conditionning(product_size)
+            conditioning_unit = Conditioning.find_by(name: product_size[:name])
+
+            if conditioning_unit.present?
+              conditioning_unit
+            else
+              base_unit = Unit.import_from_lexicon('liter')
+
+              Conditioning.create!(
+                name: product_size[:name],
+                base_unit: base_unit,
+                coefficient: base_unit.coefficient,
+                description: product_size[:kind]
+              )
+            end
           end
 
       end
