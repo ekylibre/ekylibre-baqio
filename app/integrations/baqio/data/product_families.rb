@@ -9,7 +9,7 @@ module Integrations
         end
 
         def format_data(list)
-          list.select{ |c| c[:name] != 'Transport' }.map do |family_product|
+          list.map do |family_product|
             family_product.filter{ |k, _v| desired_fields.include?(k) }
           end
         end
@@ -25,7 +25,7 @@ module Integrations
           end
 
           def desired_fields
-            %i[id name displayed]
+            %i[id name displayed kind]
           end
 
       end
