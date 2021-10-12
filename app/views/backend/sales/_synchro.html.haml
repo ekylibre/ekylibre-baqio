@@ -1,6 +1,6 @@
 - if Integration.find_by(nature: 'baqio').present?
   - job_running = Preference.get(:baqio_fetch_job_running, false, :boolean)&.value
   - main_toolbar do |t|
-    = link_to :baqio_synchronisation.tl, backend_baqio_synchro_path, class: 'btn btn-default icn btn-load', disabled: job_running
+    = link_to :baqio_synchronisation.tl, backend_baqio_synchro_path, class: 'btn btn-default icn btn-load update-job', disabled: job_running
     - if job_running
       = content_tag(:i, nil, class: 'bqspinner')
