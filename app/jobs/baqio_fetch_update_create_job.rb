@@ -30,6 +30,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       ExceptionNotifier.notify_exception($ERROR_INFO, data: { message: error })
     end
     if (user = User.find_by_id(user_id))
+      ActionCable.server.broadcast("main_#{user.email}", event: 'update_job_over')
       notif_params =  if @error.nil?
                         correct_baqio_fetch_params
                       else
