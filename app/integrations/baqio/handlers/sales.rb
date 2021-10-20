@@ -27,8 +27,10 @@ module Integrations
             data_orders.each do |order|
               next if find_and_update_existant_sale(order).present?
 
-              entity = find_or_create_entity(@vendor, order[:customer])
-              create_sale(order, entity)
+              if order[:order_lines_not_deleted].present?
+                entity = find_or_create_entity(@vendor, order[:customer])
+                create_sale(order, entity)
+              end
             end
 
             break if data_orders.blank? || @page == 50
