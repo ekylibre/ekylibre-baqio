@@ -21,7 +21,16 @@ module Integrations
         private
 
           def find_existant_incoming_payment_mode(payment_source)
-            IncomingPaymentMode.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:id].to_s).first
+            incoming_payment_mode = IncomingPaymentMode.find_by(name: payment_source[:name])
+
+            if incoming_payment_mode.present? && incoming_payment_mode.provider.blank?
+              incoming_payment_mode.update!(provider: { vendor: @vendor, name: 'Baqio_payment_source',
+                data: { id: payment_source[:id].to_s, bank_information_id: payment_source[:bank_information_id].to_s } })
+
+              incoming_payment_mode
+            else
+              IncomingPaymentMode.of_provider_vendor(@vendor).of_provider_data(:id, payment_source[:id].to_s).first
+            end
           end
 
           def create_incoming_payment_mode(payment_source)
