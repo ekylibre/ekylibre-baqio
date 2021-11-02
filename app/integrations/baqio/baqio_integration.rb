@@ -68,6 +68,7 @@ module Baqio
 
     # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1orders/get
     def fetch_orders(page)
+      
       # Call API
       get_json(base_url + ORDERS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do

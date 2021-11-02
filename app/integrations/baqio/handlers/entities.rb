@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-module Integrations
   module Baqio
     module Handlers
       class Entities
@@ -108,4 +107,3 @@ module Integrations
       end
     end
   end
-end

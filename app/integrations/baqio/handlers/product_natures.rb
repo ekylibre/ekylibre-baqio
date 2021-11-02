@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-module Integrations
   module Baqio
     module Handlers
       class ProductNatures
@@ -75,4 +74,3 @@ module Integrations
       end
     end
   end
-end

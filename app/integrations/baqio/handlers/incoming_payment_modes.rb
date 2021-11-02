@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-module Integrations
   module Baqio
     module Handlers
       class IncomingPaymentModes
@@ -11,7 +10,7 @@ module Integrations
         end
 
         def bulk_find_or_create
-          Integrations::Baqio::Data::PaymentSources.new.result.each do |payment_source|
+          Baqio::Data::PaymentSources.new.result.each do |payment_source|
             next if find_existant_incoming_payment_mode(payment_source).present?
 
             create_incoming_payment_mode(payment_source)
@@ -92,4 +91,4 @@ module Integrations
       end
     end
   end
-end
+
