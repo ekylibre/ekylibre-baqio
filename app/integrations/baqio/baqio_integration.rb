@@ -33,7 +33,7 @@ module Baqio
       integration = fetch integration
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
-      headers = { authorization: "Basic #{auth_encode}", content_type: :json, accept: :json }
+      { authorization: "Basic #{auth_encode}", content_type: 'application/json' }
     end
 
     # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
