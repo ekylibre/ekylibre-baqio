@@ -28,8 +28,9 @@ module Baqio
               create_sale(order, entity)
             end
           end
-
-          break if data_orders.blank? || @page == 50
+          
+          #FIXME: data_orders is blank if none order on page are between opened financial year dates
+          break if @page == 50 # || data_orders.blank? 
         end
       end
 

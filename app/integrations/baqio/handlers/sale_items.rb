@@ -49,7 +49,7 @@ module Baqio
                             elsif product_variant[:product][:kind] == 'pack'
                               # TODO : manage product variant 'pack'
                             end
-
+        binding.pry if eky_tax.nil?
         sale.items.build(
           sale_id: sale.id,
           variant_id: variant.id,
@@ -133,6 +133,8 @@ module Baqio
 
         elsif order[:accounting_tax] == 'world'
           Tax.find_by(nature: 'import_export_vat', amount: 0.0)
+        else
+          binding.pry
         end
       end
 

@@ -24,6 +24,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       sales = Baqio::Handlers::Sales.new(vendor: VENDOR)
       sales.bulk_find_or_create
     rescue StandardError => error
+      binding.pry
       Rails.logger.error $ERROR_INFO
       Rails.logger.error $ERROR_INFO.backtrace.join("\n")
       @error = error
