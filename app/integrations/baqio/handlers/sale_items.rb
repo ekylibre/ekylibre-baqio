@@ -176,7 +176,7 @@ module Baqio
           Conditioning.create!(
             name: product_size[:name],
             base_unit: base_unit,
-            coefficient: base_unit.coefficient,
+            coefficient: product_size[:milliliters] / 1000,
             description: product_size[:kind]
           )
         end

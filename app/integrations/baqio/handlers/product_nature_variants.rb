@@ -63,18 +63,15 @@ module Baqio
         variant.default_unit_id = import_variant.default_unit_id
         variant.provider = { vendor: @vendor, name: 'Baqio_order_line_not_deleted',
                              data: { id: order_line_not_deleted[:product_variant_id].to_s } }
-        variant.save!
-
-        # create associate ProductNatureVariantReading
-        ProductNatureVariantReading.create!(
-          variant_id: variant.id,
+        variant.readings.build(
           indicator_name: 'net_volume',
           indicator_datatype: 'measure',
-          absolute_measure_value_value: 0.75,
+          absolute_measure_value_value: 1,
           absolute_measure_value_unit: 'liter',
-          measure_value_value: 0.75,
+          measure_value_value: 1,
           measure_value_unit: 'liter'
         )
+        variant.save!
 
         variant
       end
