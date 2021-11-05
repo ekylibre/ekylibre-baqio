@@ -53,30 +53,27 @@ module Integrations
             product_nature = find_or_create_product_nature(@vendor, nature_id, product_nature_category)
 
             import_variant = ProductNatureVariant.import_from_lexicon(:wine)
-            import_reference_unit = Unit.import_from_lexicon('milliliter')
+            reference_unit = Unit.import_from_lexicon('liter')
 
             variant = ProductNatureVariant.find_or_initialize_by(name: order_line_not_deleted[:name])
             variant.category_id = product_nature_category.id
             variant.nature_id = product_nature.id
             variant.active = import_variant.active
             variant.type = import_variant.type
-            variant.default_quantity = import_variant.default_quantity
-            variant.default_unit_name = import_variant.default_unit_name
-            variant.default_unit_id = import_variant.default_unit_id
+            variant.default_quantity = 1
+            variant.default_unit_name = reference_unit.reference_name
+            variant.default_unit_id = reference_unit.id
             variant.provider = { vendor: @vendor, name: 'Baqio_order_line_not_deleted',
-              data: { id: order_line_not_deleted[:product_variant_id].to_s } }
-            variant.save!
-
-            # create associate ProductNatureVariantReading
-            ProductNatureVariantReading.create!(
-              variant_id: variant.id,
+                                data: { id: order_line_not_deleted[:product_variant_id].to_s } }
+            variant.readings.build(
               indicator_name: 'net_volume',
               indicator_datatype: 'measure',
-              absolute_measure_value_value: 0.75,
+              absolute_measure_value_value: 1,
               absolute_measure_value_unit: 'liter',
-              measure_value_value: 0.75,
+              measure_value_value: 1,
               measure_value_unit: 'liter'
             )
+            variant.save!
 
             variant
           end

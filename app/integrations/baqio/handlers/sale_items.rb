@@ -180,12 +180,10 @@ module Integrations
               Conditioning.create!(
                 name: product_size[:name],
                 base_unit: base_unit,
-                coefficient: base_unit.coefficient,
-                description: product_size[:kind]
+                coefficient: (product_size[:milliliters] &./ 1000.to_f)
               )
             end
           end
-
       end
     end
   end
