@@ -17,23 +17,21 @@ module Integrations
         private
 
           def find_or_create_variant(order_line_not_deleted)
-            baqio_product_variant_id = order_line_not_deleted[:product_variant_id].to_s
-            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, baqio_product_variant_id).first
+            product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
+            product_id = product_variants[:product][:id]
+            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_id.to_s).first
 
             if product_nature_variant.present?
               product_nature_variant
             elsif order_line_not_deleted[:description] == 'ZDISCOUNT'
               create_product_nature_variant_discount_and_reduction(order_line_not_deleted)
-            else
-              product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
+            elsif product_variants[:product][:kind] == 'standard'
               # Create good variant #other #pack or #standard
-              if product_variants[:product][:kind] == 'standard'
-                create_product_nature_variant(order_line_not_deleted, product_variants)
-              elsif product_variants[:product][:kind] == 'other'
-                create_product_nature_variant_additional_activity(order_line_not_deleted)
-              elsif product_variants[:product][:kind] == 'pack'
-                # TODO : create associate variant 'pack'
-              end
+              create_product_nature_variant(order_line_not_deleted, product_variants)
+            elsif product_variants[:product][:kind] == 'other'
+              create_product_nature_variant_additional_activity(order_line_not_deleted)
+            elsif product_variants[:product][:kind] == 'pack'
+              # TODO : create associate variant 'pack'
             end
           end
 
@@ -64,7 +62,7 @@ module Integrations
             variant.default_unit_name = reference_unit.reference_name
             variant.default_unit_id = reference_unit.id
             variant.provider = { vendor: @vendor, name: 'Baqio_order_line_not_deleted',
-                                data: { id: order_line_not_deleted[:product_variant_id].to_s } }
+                                data: { id: product_variants[:product][:id].to_s } }
             variant.readings.build(
               indicator_name: 'net_volume',
               indicator_datatype: 'measure',
