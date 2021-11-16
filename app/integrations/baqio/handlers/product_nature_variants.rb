@@ -17,21 +17,23 @@ module Integrations
         private
 
           def find_or_create_variant(order_line_not_deleted)
-            product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
-            product_id = product_variants[:product][:id]
-            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_id.to_s).first
+            baqio_product_variant_id = order_line_not_deleted[:product_variant_id].to_s
+            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, baqio_product_variant_id).first
 
             if product_nature_variant.present?
               product_nature_variant
             elsif order_line_not_deleted[:description] == 'ZDISCOUNT'
               create_product_nature_variant_discount_and_reduction(order_line_not_deleted)
-            elsif product_variants[:product][:kind] == 'standard'
+            else
+              product_variants = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
               # Create good variant #other #pack or #standard
-              create_product_nature_variant(order_line_not_deleted, product_variants)
-            elsif product_variants[:product][:kind] == 'other'
-              create_product_nature_variant_additional_activity(order_line_not_deleted)
-            elsif product_variants[:product][:kind] == 'pack'
-              # TODO : create associate variant 'pack'
+              if product_variants[:product][:kind] == 'standard'
+                create_product_nature_variant(product_variants)
+              elsif product_variants[:product][:kind] == 'other'
+                create_product_nature_variant_additional_activity(order_line_not_deleted)
+              elsif product_variants[:product][:kind] == 'pack'
+                # TODO : create associate variant 'pack'
+              end
             end
           end
 
@@ -39,7 +41,7 @@ module Integrations
             Integrations::Baqio::Data::ProductVariants.new(product_variant_id: product_variant_id).result
           end
 
-          def create_product_nature_variant(order_line_not_deleted, product_variants)
+          def create_product_nature_variant(product_variants)
             # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
             baqio_product_category_id = product_variants[:product][:product_category_id]
             baqio_product_family_id = product_variants[:product][:product_family_id]
@@ -52,8 +54,11 @@ module Integrations
 
             import_variant = ProductNatureVariant.import_from_lexicon(:wine)
             reference_unit = Unit.import_from_lexicon('liter')
+            baqio_variant_name = [product_variants[:product][:name], product_variants[:vintage], product_variants[:product][:appelation],
+                                  product_variants[:product][:product_color][:name], product_variants[:sku]].reject(&:blank?).join(' - ')
 
-            variant = ProductNatureVariant.find_or_initialize_by(name: order_line_not_deleted[:name])
+            variant = ProductNatureVariant.find_or_initialize_by(name: baqio_variant_name)
+            variant.name = baqio_variant_name
             variant.category_id = product_nature_category.id
             variant.nature_id = product_nature.id
             variant.active = import_variant.active
@@ -61,8 +66,9 @@ module Integrations
             variant.default_quantity = 1
             variant.default_unit_name = reference_unit.reference_name
             variant.default_unit_id = reference_unit.id
-            variant.provider = { vendor: @vendor, name: 'Baqio_order_line_not_deleted',
-                                data: { id: product_variants[:product][:id].to_s } }
+            variant.unit_name = 'Litre'
+            variant.provider = { vendor: @vendor, name: 'Baqio_product_variants',
+                                data: { id: product_variants[:id].to_s } }
             variant.readings.build(
               indicator_name: 'net_volume',
               indicator_datatype: 'measure',

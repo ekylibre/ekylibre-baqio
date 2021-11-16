@@ -14,6 +14,7 @@ module Integrations
 
         def format_data(product_variants)
           data = {}
+          data = product_variants.filter { |k, _v| main_desired_fields.include?(k) }
           data[:product] = format_product_variants_product(product_variants[:product])
 
           if product_variants[:product_size].present?
@@ -33,8 +34,12 @@ module Integrations
             end
           end
 
+          def main_desired_fields
+            %i[id vintage sku]
+          end
+
           def format_product_variants_product(product_variants_product)
-            desired_fields = %i[id product_family_id product_category_id kind]
+            desired_fields = %i[name product_family_id product_category_id kind appelation product_color]
             data = product_variants_product.filter { |k, _v| desired_fields.include?(k) }
             data
           end
