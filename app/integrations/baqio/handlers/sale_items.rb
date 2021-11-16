@@ -55,7 +55,7 @@ module Integrations
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
-              label: "#{order_line_not_deleted[:name]} - #{order_line_not_deleted[:complement]} - #{order_line_not_deleted[:description]}",
+              label: "#{order_line_not_deleted[:name]} - #{order_line_not_deleted[:complement]}",
               currency: order_line_not_deleted[:price_currency],
               quantity: order_line_not_deleted[:quantity].to_d,
               reduction_percentage: reduction_percentage,
