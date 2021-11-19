@@ -12,7 +12,7 @@ module Integrations
           exceptional: 'particular_vat'
         }.freeze
 
-        EU_CT_CODE = %w[BE DE DK].freeze
+        EU_CT_CODE = %w[BE DE DK IT].freeze
 
         def initialize(vendor:, sale:, order:)
           @vendor = vendor
@@ -51,7 +51,6 @@ module Integrations
                                 elsif product_variant[:product][:kind] == 'pack'
                                   # TODO : manage product variant 'pack'
                                 end
-
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
