@@ -38,19 +38,19 @@ module Integrations
 
           def create_sale_items(sale, order, order_line_not_deleted)
             eky_tax = find_baqio_tax_to_eky(order_line_not_deleted, order)
-            variant = find_or_create_variant(order_line_not_deleted)
+            variant = ProductNatureVariant.of_provider_vendor(@vendor)
+                                          .of_provider_data(:id, order_line_not_deleted[:product_variant_id].to_s).first
             pretax_amount = (order_line_not_deleted[:final_price_cents] / 100.0).to_f
             reduction_percentage = compute_reduction_percentage(order_line_not_deleted)
 
-            product_variant = fetch_baqio_product_variants(order_line_not_deleted[:product_variant_id])
-
-            conditioning_unit = if product_variant[:product][:kind] == 'standard'
-                                  find_or_create_conditionning(product_variant[:product_size])
-                                elsif product_variant[:product][:kind] == 'other'
+            # If conditionning is created in product nature variant
+            product_size_id = order_line_not_deleted[:product_variant][:product_size_id]
+            conditioning_unit = if product_size_id.present?
+                                  Conditioning.of_provider_vendor(@vendor).of_provider_data(:id, product_size_id.to_s).first
+                                else
                                   Unit.import_from_lexicon('unity')
-                                elsif product_variant[:product][:kind] == 'pack'
-                                  # TODO : manage product variant 'pack'
                                 end
+
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
@@ -158,31 +158,6 @@ module Integrations
             end
           end
 
-          def find_or_create_variant(order_line_not_deleted)
-            variant = Integrations::Baqio::Handlers::ProductNatureVariants.new(vendor: @vendor,
-  order_line_not_deleted: order_line_not_deleted)
-            variant.bulk_find_or_create
-          end
-
-          def fetch_baqio_product_variants(product_variant_id)
-            Integrations::Baqio::Data::ProductVariants.new(product_variant_id: product_variant_id).result
-          end
-
-          def find_or_create_conditionning(product_size)
-            conditioning_unit = Conditioning.find_by(name: product_size[:name])
-
-            if conditioning_unit.present?
-              conditioning_unit
-            else
-              base_unit = Unit.import_from_lexicon('liter')
-
-              Conditioning.create!(
-                name: product_size[:name],
-                base_unit: base_unit,
-                coefficient: (product_size[:milliliters] &./ 1000.to_f)
-              )
-            end
-          end
       end
     end
   end
