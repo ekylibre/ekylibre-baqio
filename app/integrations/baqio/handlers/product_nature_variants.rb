@@ -29,7 +29,7 @@ module Integrations
             elsif product_variant[:product][:kind] == 'other'
               create_product_nature_variant_additional_activity(product_variant)
             elsif product_variant[:product][:kind] == 'pack'
-              # TODO : create associate variant 'pack'
+              create_product_nature_variant_packaging(product_variant)
             end
           end
 
@@ -114,6 +114,27 @@ module Integrations
             product_nature_variant.provider =  { vendor: @vendor, name: 'Baqio_product_variant_other',
   data: { id: product_variant[:id].to_s } }
             product_nature_variant.save!
+
+            product_nature_variant
+          end
+
+          def create_product_nature_variant_packaging(product_variant)
+            product_nature = ProductNature.import_from_lexicon(:packaging)
+            product_nature_category = ProductNatureCategory.import_from_lexicon(:processed_product)
+            reference_unit = Unit.import_from_lexicon('unity')
+
+            product_nature_variant = ProductNatureVariant.create!(
+              name: "#{product_variant[:product][:name]} #{product_variant[:product][:product_family][:name]}",
+              nature_id: product_nature.id,
+              category_id: product_nature_category.id,
+              variety: product_nature.variety, # TO CHECK
+              active: true,
+              default_quantity: 1,
+              default_unit_name: reference_unit.reference_name,
+              default_unit_id: reference_unit.id,
+              provider:  { vendor: @vendor, name: 'Baqio_product_variant_pack',
+                data: { id: product_variant[:id].to_s } }
+            )
 
             product_nature_variant
           end
