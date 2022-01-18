@@ -57,7 +57,7 @@ parameters: { api_key: ENV['API_KEY'], api_password: ENV['API_PASSWORD'], api_se
 
   def test_product_variants
     VCR.use_cassette('product_variants') do
-      Baqio::BaqioIntegration.fetch_product_variants(@product_variant_id).execute do |call|
+      Baqio::BaqioIntegration.fetch_product_variants.execute do |call|
         call.success do |response|
           assert_equal Hash, response.first.class, 'Should return an array of hash counter'
           assert %w[id product].all? { |s| response.first.key? s }, 'Should have correct attributes'

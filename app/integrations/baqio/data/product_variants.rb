@@ -4,30 +4,27 @@ module Integrations
   module Baqio
     module Data
       class ProductVariants
-        def initialize(product_variant_id:)
-          @product_variant_id = product_variant_id
-        end
-
         def result
           @formated_data ||= call_api
         end
 
-        def format_data(product_variants)
-          data = {}
-          data = product_variants.filter { |k, _v| main_desired_fields.include?(k) }
-          data[:product] = format_product_variants_product(product_variants[:product])
+        def format_data(list)
+          list.map do |product_variant|
+            data_product_variant = product_variant.filter { |k, _v| main_desired_fields.include?(k) }
+            data_product_variant[:product] = format_product_variants_product(product_variant[:product])
 
-          if product_variants[:product_size].present?
-            data[:product_size] = format_product_variants_product_size(product_variants[:product_size])
+            if product_variant[:product_size].present?
+              data_product_variant[:product_size] = format_product_variants_product_size(product_variant[:product_size])
+            end
+
+            data_product_variant
           end
-
-          data
         end
 
         private
 
           def call_api
-            ::Baqio::BaqioIntegration.fetch_product_variants(@product_variant_id).execute do |c|
+            ::Baqio::BaqioIntegration.fetch_product_variants.execute do |c|
               c.success do |list|
                 format_data(list)
               end
@@ -39,14 +36,21 @@ module Integrations
           end
 
           def format_product_variants_product(product_variants_product)
-            desired_fields = %i[name product_family_id product_category_id kind appelation product_color]
+            desired_fields = %i[name product_family_id product_category_id kind appellation product_color]
             data = product_variants_product.filter { |k, _v| desired_fields.include?(k) }
+            data[:product_family] = format_product_variants_product_family(product_variants_product[:product_family])
             data
           end
 
           def format_product_variants_product_size(product_variants_product_size)
-            desired_fields = %i[id name milliliters short_name kind]
+            desired_fields = %i[id name milliliters short_name kind updated_at]
             data = product_variants_product_size.filter { |k, _v| desired_fields.include?(k) }
+            data
+          end
+
+          def format_product_variants_product_family(product_variants_product_family)
+            desired_fields = %i[name]
+            data = product_variants_product_family.filter { |k, _v| desired_fields.include?(k) }
             data
           end
 
