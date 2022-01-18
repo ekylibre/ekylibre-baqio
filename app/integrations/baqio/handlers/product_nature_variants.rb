@@ -124,7 +124,7 @@ module Integrations
             reference_unit = Unit.import_from_lexicon('unity')
 
             product_nature_variant = ProductNatureVariant.create!(
-              name: "#{product_variant[:product][:name]} #{product_variant[:product][:product_family][:name]}",
+              name: "#{product_variant[:product][:name]} - #{product_variant[:product][:product_family][:name]}",
               nature_id: product_nature.id,
               category_id: product_nature_category.id,
               variety: product_nature.variety, # TO CHECK
