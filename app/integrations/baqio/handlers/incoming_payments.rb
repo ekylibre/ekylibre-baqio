@@ -27,16 +27,6 @@ module Integrations
             baqio_payment_date = Date.parse(payment_link[:payment][:date].to_s).to_time
             baqio_payment_currency = payment_link[:payment][:amount_currency]
 
-            # Update if incoming_payment exist AND if payment_link[:payment][:deleted_at] is nil
-            if incoming_payment && payment_link[:payment][:deleted_at].nil?
-              # update incoming payment attrs
-              incoming_payment.paid_at = baqio_payment_date
-              incoming_payment.to_bank_at = baqio_payment_date
-              incoming_payment.amount = baqio_payment_amount
-              incoming_payment.currency = baqio_payment_currency
-              incoming_payment.save!
-            end
-
             # Delete if incoming_payment exist AND if payment_link[:payment][:deleted_at] is present (date)
             if incoming_payment && payment_link[:payment][:deleted_at].present?
               incoming_payment.destroy
