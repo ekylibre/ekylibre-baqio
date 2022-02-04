@@ -40,6 +40,7 @@ module Integrations
                 currency: baqio_payment_currency,
                 mode_id: mode.id,
                 payer: sale.client,
+                received: true,
                 paid_at: baqio_payment_date,
                 to_bank_at: baqio_payment_date,
                 provider: { vendor: @vendor, name: 'Baqio_payment', data: { id: payment_link[:payment][:id] } }
