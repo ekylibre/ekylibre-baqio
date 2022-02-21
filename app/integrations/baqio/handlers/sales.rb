@@ -27,7 +27,7 @@ module Integrations
             data_orders.each do |order|
               next if find_and_update_existant_sale(order).present?
 
-              if order[:order_lines_not_deleted].present?
+              if order[:order_lines_not_deleted].present? && order[:state] != 'cancelled'
                 entity = find_or_create_entity(@vendor, order[:customer])
                 create_sale(order, entity)
               end
