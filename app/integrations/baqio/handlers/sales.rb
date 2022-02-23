@@ -40,8 +40,8 @@ module Integrations
         private
 
           def find_and_update_existant_sale(order)
-            sale = Sale.of_provider_vendor(@vendor).of_provider_data(:id, order[:id].to_s).first
 
+            sale = Sale.of_provider(@vendor, 'Baqio_order', order[:id]).first
             if sale.present?
               update_existant_sale(sale, order)
             end
@@ -57,7 +57,10 @@ module Integrations
               sale.items.destroy_all
               create_sale_items(sale, order)
               # Update sale provider with new updated_at
-              sale.provider = { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } }
+              sale.provider = { data: {updated_at: order[:updated_at]},
+                                vendor: @vendor, 
+                                name: 'Baqio_order',
+                                id: order[:id]}
               sale.reference_number = order[:invoice_debit][:name] if baqio_sale_state == :invoice
               sale.save!
 
@@ -73,7 +76,10 @@ module Integrations
             sale = Sale.new(
               client_id: entity.id,
               reference_number: order[:name],
-              provider: { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } },
+              provider: { data: {updated_at: order[:updated_at]},
+                          vendor: @vendor, 
+                          name: 'Baqio_order',
+                          id: order[:id]}
             )
 
             create_sale_items(sale, order)
