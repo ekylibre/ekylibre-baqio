@@ -131,11 +131,10 @@ module Integrations
             if sale.credits.empty? && order[:state] == 'cancelled' && !order[:total_price_cents].zero?
               sale_credit = sale.build_credit
               sale_credit.reference_number = order[:invoice_credit][:name]
-              sale_credit.provider = {
-                                      vendor: @vendor,
-                                      name: 'Baqio_order_invoice_credit',
-                                      data: { id: order[:invoice_credit][:id], order_id: order[:invoice_credit][:order_id] }
-                                      }
+              sale_credit.provider = {  id: order[:invoice_credit][:id],
+                                        name: 'Baqio_order_invoice_credit',
+                                        vendor: @vendor,
+                                        data: { order_id: order[:invoice_credit][:order_id] }}
               sale_credit.save!
               invoiced_date = order[:invoice_credit][:created_at].to_time
               sale_credit.update!(created_at: invoiced_date, confirmed_at: invoiced_date, invoiced_at: invoiced_date)
