@@ -53,7 +53,7 @@ module Integrations
 
           def format_order_lines_not_deleted(order_lines_not_deleted)
             order_lines_not_deleted.map do |order_line_not_deleted|
-              desired_fields = %i[id name complement description total_discount_cents final_price_cents price_currency
+              desired_fields = %i[id name complement description price_cents total_discount_cents final_price_cents price_currency
                                   quantity final_price_with_tax_cents tax_lines product_variant_id product_variant]
               data = order_line_not_deleted.filter { |k, _v| desired_fields.include?(k) }
               data[:product_variant] = format_order_product_variant(order_line_not_deleted[:product_variant])
