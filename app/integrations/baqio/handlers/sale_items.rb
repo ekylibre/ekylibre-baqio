@@ -58,7 +58,7 @@ module Integrations
               currency: order_line_not_deleted[:price_currency],
               quantity: order_line_not_deleted[:quantity].to_d,
               reduction_percentage: reduction_percentage,
-              unit_pretax_amount: (pretax_amount / order_line_not_deleted[:quantity].to_f).round(2),
+              unit_pretax_amount: (order_line_not_deleted[:price_cents].to_f / 100),
               pretax_amount: pretax_amount,
               amount: (order_line_not_deleted[:final_price_with_tax_cents] / 100.0).to_d,
               compute_from: 'pretax_amount',
@@ -101,14 +101,13 @@ module Integrations
           end
 
           def compute_reduction_percentage(order_line_not_deleted)
-            compute_reduction = (order_line_not_deleted[:total_discount_cents].to_f / order_line_not_deleted[:final_price_cents].to_f) * 100
-
             if order_line_not_deleted[:final_price_cents].zero? && !order_line_not_deleted[:total_discount_cents].zero?
               100
             elsif order_line_not_deleted[:total_discount_cents] == 0
               0
             else
-              compute_reduction
+              total_price_before_reduction = order_line_not_deleted[:price_cents] * order_line_not_deleted[:quantity].to_f
+              compute_reduction = 100 - ((order_line_not_deleted[:final_price_cents].to_f / total_price_before_reduction.round(2)) * 100)
             end
           end
 
