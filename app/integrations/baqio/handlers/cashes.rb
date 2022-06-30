@@ -13,7 +13,7 @@ module Integrations
 
         def bulk_find_or_create
           bank_informations.each do |bank_information|
-            next if find_and_update_existant_cash(bank_information).present?
+            next if find_existant_cash(bank_information).present?
 
             create_cash(bank_information)
           end
@@ -22,19 +22,9 @@ module Integrations
         private
           attr_reader :bank_informations
 
-          def find_and_update_existant_cash(bank_information)
+          def find_existant_cash(bank_information)
             iban = bank_information[:iban].gsub(/\s+/, '')
-            cash = Cash.find_by(iban: iban)
-
-            if cash.present?
-              cash.update!(
-                name: bank_information[:domiciliation],
-                bank_name: bank_information[:domiciliation],
-                bank_identifier_code: bank_information[:bic],
-                bank_account_holder_name: bank_information[:owner],
-                by_default: bank_information[:primary],
-              )
-            end
+            Cash.find_by(iban: iban)
           end
 
           def create_cash(bank_information)
@@ -51,9 +41,7 @@ module Integrations
               journal_id: journal.id,
               main_account_id: account.id,
               bank_account_holder_name: bank_information[:owner],
-              by_default: bank_information[:primary],
-              provider: { vendor: @vendor, name: 'Baqio_bank_information',
-  data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
+              by_default: bank_information[:primary]
             )
           end
 
