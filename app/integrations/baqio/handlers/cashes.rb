@@ -6,12 +6,13 @@ module Integrations
       class Cashes
         BANK_ACCOUNT_PREFIX_NUMBER = '512201'
 
-        def initialize(vendor:)
+        def initialize(vendor:, bank_informations: Integrations::Baqio::Data::BankInformations.new.result )
           @vendor = vendor
+          @bank_informations = bank_informations
         end
 
         def bulk_find_or_create
-          Integrations::Baqio::Data::BankInformations.new.result.each do |bank_information|
+          bank_informations.each do |bank_information|
             next if find_and_update_existant_cash(bank_information).present?
 
             create_cash(bank_information)
@@ -19,6 +20,7 @@ module Integrations
         end
 
         private
+          attr_reader :bank_informations
 
           def find_and_update_existant_cash(bank_information)
             iban = bank_information[:iban].gsub(/\s+/, '')
@@ -31,8 +33,6 @@ module Integrations
                 bank_identifier_code: bank_information[:bic],
                 bank_account_holder_name: bank_information[:owner],
                 by_default: bank_information[:primary],
-                provider: { vendor: @vendor, name: 'Baqio_bank_information',
-data: { id: bank_information[:id].to_s, primary: bank_information[:primary]  } }
               )
             end
           end
