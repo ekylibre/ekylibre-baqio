@@ -1,6 +1,12 @@
 require 'vcr'
 require('dotenv')
 
+# TODO: Files under app/integration/** are not load in test.
+# Reorganise folder structure and module
+Dir.glob(EkylibreBaqio::Engine.root.join('app', 'integrations', '**', '*.rb')).sort.each do |file|
+  require file
+end
+
 Dotenv.load(File.join(EkylibreBaqio::Engine.root, '.env'))
 
 VCR.configure do |config|
