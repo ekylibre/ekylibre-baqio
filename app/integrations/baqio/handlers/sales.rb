@@ -42,7 +42,7 @@ module Integrations
           def find_and_update_existant_sale(order)
             sale = Sale.of_provider_vendor(@vendor).of_provider_data(:id, order[:id].to_s).first
 
-            if sale.present?
+            if sale.present? && order[:order_lines_not_deleted].present?
               update_existant_sale(sale, order)
             end
 
