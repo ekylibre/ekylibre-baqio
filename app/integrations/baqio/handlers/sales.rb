@@ -52,7 +52,7 @@ module Integrations
           def update_existant_sale(sale, order)
             baqio_sale_state = BQ_STATE[order[:state].to_sym]
 
-            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != baqio_sale_state && sale.state != 'invoice'
+            if sale.state != baqio_sale_state && sale.state != 'invoice'
               # Delete all sale items and create new sale items
               sale.items.destroy_all
               create_sale_items(sale, order)
