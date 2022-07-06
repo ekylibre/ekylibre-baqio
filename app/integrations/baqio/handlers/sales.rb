@@ -25,6 +25,7 @@ module Integrations
             data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result
 
             data_orders.each do |order|
+              next if order[:state] == ('pending' || 'draft')
               next if find_and_update_existant_sale(order).present?
 
               if order[:order_lines_not_deleted].present? && order[:state] != 'cancelled'
