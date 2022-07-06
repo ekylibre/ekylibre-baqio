@@ -25,6 +25,7 @@ module Integrations
             data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result
 
             data_orders.each do |order|
+              next if order[:state] == ('pending' || 'draft')
               next if find_and_update_existant_sale(order).present?
 
               if order[:order_lines_not_deleted].present? && order[:state] != 'cancelled'
@@ -42,7 +43,7 @@ module Integrations
           def find_and_update_existant_sale(order)
             sale = Sale.of_provider_vendor(@vendor).of_provider_data(:id, order[:id].to_s).first
 
-            if sale.present?
+            if sale.present? && order[:order_lines_not_deleted].present?
               update_existant_sale(sale, order)
             end
 
@@ -52,7 +53,7 @@ module Integrations
           def update_existant_sale(sale, order)
             baqio_sale_state = BQ_STATE[order[:state].to_sym]
 
-            if sale.provider[:data]['updated_at'] != order[:updated_at] && sale.state != baqio_sale_state && sale.state != 'invoice'
+            if sale.state != baqio_sale_state && sale.state != 'invoice'
               # Delete all sale items and create new sale items
               sale.items.destroy_all
               create_sale_items(sale, order)
