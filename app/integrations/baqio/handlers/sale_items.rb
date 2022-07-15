@@ -79,7 +79,7 @@ module Integrations
                       else
                         Tax.find_by(nature: 'normal_vat', country: 'fr')
                       end
-            
+
             variant = ProductNatureVariant.import_from_lexicon(:transportation)
             conditioning_unit = Unit.import_from_lexicon('unity')
 
