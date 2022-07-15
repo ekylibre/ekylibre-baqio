@@ -77,9 +77,9 @@ module Integrations
             eky_tax = if shipping_line_tax_line.present?
                         find_or_create_baqio_country_tax(shipping_line_tax_line)
                       else
-                        Tax.find_by(nature: 'null_vat')
+                        Tax.find_by(nature: 'normal_vat', country: 'fr')
                       end
-
+            
             variant = ProductNatureVariant.import_from_lexicon(:transportation)
             conditioning_unit = Unit.import_from_lexicon('unity')
 
@@ -147,7 +147,6 @@ module Integrations
             country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
 
             baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
-
             if baqio_tax.present?
               baqio_tax
             else
