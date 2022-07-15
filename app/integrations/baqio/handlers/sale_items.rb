@@ -70,14 +70,11 @@ module Integrations
           end
 
           def create_shipping_line_sale_item(sale, shipping_line, order)
-            shipping_line_tax_price_cents = shipping_line[:price_with_tax_cents] - shipping_line[:price_cents]
-            # Find shipping_line tax_line throught order[:tax_line] with price_cents
-            shipping_line_tax_line = order[:tax_lines].select {|t| t[:price_cents] == shipping_line_tax_price_cents }
-
-            eky_tax = if shipping_line_tax_line.present?
-                        find_or_create_baqio_country_tax(shipping_line_tax_line)
+            # Find shipping_line tax throught order[:tax_lines]
+            eky_tax = if order[:tax_lines].present?
+                        find_or_create_baqio_country_tax(order[:tax_lines])
                       else
-                        Tax.find_by(nature: 'normal_vat', country: 'fr')
+                        Tax.find_by(nature: 'null_vat')
                       end
 
             variant = ProductNatureVariant.import_from_lexicon(:transportation)
@@ -145,7 +142,6 @@ module Integrations
             country_tax_code = country_tax_baqio[:code].downcase
             country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
             country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
-
             baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
             if baqio_tax.present?
               baqio_tax
