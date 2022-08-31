@@ -50,7 +50,7 @@ module Integrations
                                 else
                                   Unit.import_from_lexicon('unity')
                                 end
-
+            
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
@@ -146,9 +146,9 @@ module Integrations
             if baqio_tax.present?
               baqio_tax
             else
-              # Import all tax from onoma with country_tax_code (eg: "fr", "dk")
-              Tax.import_all_from_nomenclature(country: country_tax_code)
-              Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+              # Import tax from onoma with country_tax_code (eg: "fr", "dk")
+              item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
+              Tax.import_from_nomenclature(item.name)
             end
           end
 
