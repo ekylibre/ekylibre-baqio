@@ -50,7 +50,7 @@ module Integrations
                                 else
                                   Unit.import_from_lexicon('unity')
                                 end
-            
+
             sale.items.build(
               sale_id: sale.id,
               variant_id: variant.id,
@@ -135,7 +135,7 @@ module Integrations
             end
           end
 
-          def find_or_create_baqio_country_tax(tax_line)
+          def find_or_create_baqio_country_tax(tax_line, order)
             country_tax_id = tax_line.first[:country_tax_id].to_i
             country_tax_baqio = Integrations::Baqio::Data::CountryTaxes.new(country_tax_id: country_tax_id).result.first
 
@@ -143,11 +143,14 @@ module Integrations
             country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
             country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
             baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+            item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym) if country_tax_code.present? && country_tax_type.present?
             if baqio_tax.present?
               baqio_tax
-            else
-              # Import tax from onoma with country_tax_code (eg: "fr", "dk")
-              item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
+            elsif item.present? && EU_CT_CODE.include?(order[:accounting_tax])
+              # Import tax from onoma with country_tax_code (eg: "de" ,"dk") and with option from export_private_sale
+              Tax.import_from_nomenclature(item.name)
+            elsif item.present?
+              # Import tax from onoma with country_tax_code (:fr)
               Tax.import_from_nomenclature(item.name)
             end
           end
