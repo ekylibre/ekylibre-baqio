@@ -33,7 +33,7 @@ module Baqio
       integration = fetch integration
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
-      headers = { authorization: "Basic #{auth_encode}", content_type: :json, accept: :json }
+      headers = { authorization: "Basic #{auth_encode}", 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
     end
 
     # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1payment_sources/get
@@ -102,7 +102,7 @@ module Baqio
       puts integration.inspect.red
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
-      header = { authorization: "Basic #{auth_encode}", content_type: :json, accept: :json }
+      header = { authorization: "Basic #{auth_encode}", 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
       base_url = "https://#{integration.parameters['url']}/api/v1".freeze
       get_json(base_url + FAMILY_URL, header) do |r|
         if r.state == :success
