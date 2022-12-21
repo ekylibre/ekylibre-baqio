@@ -149,7 +149,7 @@ module Integrations
               baqio_tax
             # Case 'EU particular sale'
             # https://www.comprendrelacompta.com/achat-vente-biens-hors-france/
-            elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank?
+          elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
               export_private_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: 'export_private_eu_vat')
               # Check if tax present with option 'export_private_eu_vat' or create it with item found in Onoma
               if export_private_tax.present?
