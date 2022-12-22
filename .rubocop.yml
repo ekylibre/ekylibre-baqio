@@ -5,3 +5,5 @@ AllCops:
   Exclude:
     - "bin/**/*"
     - "lib/ekylibre-baqio.rb"
+Layout/LineLength:
+  Max: 240

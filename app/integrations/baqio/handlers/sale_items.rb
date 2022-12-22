@@ -12,7 +12,7 @@ module Integrations
           exceptional: 'particular_vat'
         }.freeze
 
-        EU_CT_CODE = %w[BE DE DK IT].freeze
+        EU_CT_CODE = %w[BE DE DK IT NL ES PT].freeze
 
         def initialize(vendor:, sale:, order:)
           @vendor = vendor
@@ -72,7 +72,7 @@ module Integrations
           def create_shipping_line_sale_item(sale, shipping_line, order)
             # Find shipping_line tax throught order[:tax_lines]
             eky_tax = if order[:tax_lines].present?
-                        find_or_create_baqio_country_tax(order[:tax_lines])
+                        find_or_create_baqio_country_tax(order[:tax_lines], order)
                       else
                         Tax.find_by(nature: 'null_vat')
                       end
@@ -110,10 +110,10 @@ module Integrations
 
           def find_baqio_tax_to_eky(order_line_not_deleted, order)
             if order_line_not_deleted[:tax_lines].present?
-              find_or_create_baqio_country_tax(order_line_not_deleted[:tax_lines])
+              find_or_create_baqio_country_tax(order_line_not_deleted[:tax_lines], order)
 
             elsif order[:accounting_tax] == 'fr' && order[:tax_lines].present?
-              find_or_create_baqio_country_tax(order[:tax_lines])
+              find_or_create_baqio_country_tax(order[:tax_lines], order)
 
             elsif order[:accounting_tax] == 'fr' && !order[:tax_lines].present?
               Tax.find_by(nature: 'null_vat')
@@ -135,7 +135,7 @@ module Integrations
             end
           end
 
-          def find_or_create_baqio_country_tax(tax_line)
+          def find_or_create_baqio_country_tax(tax_line, order)
             country_tax_id = tax_line.first[:country_tax_id].to_i
             country_tax_baqio = Integrations::Baqio::Data::CountryTaxes.new(country_tax_id: country_tax_id).result.first
 
@@ -143,13 +143,58 @@ module Integrations
             country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
             country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
             baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+            if country_tax_code.present? && country_tax_type.present?
+              item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
+            end
+            # tax already present in Ekylibre
             if baqio_tax.present?
               baqio_tax
-            else
-              # Import all tax from onoma with country_tax_code (eg: "fr", "dk")
-              Tax.import_all_from_nomenclature(country: country_tax_code)
-              Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+            # Case 'EU particular sale'
+            # https://www.comprendrelacompta.com/achat-vente-biens-hors-france/
+            elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
+              export_private_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: 'export_private_eu_vat')
+              # Check if tax present with option 'export_private_eu_vat' or create it with item found in Onoma
+              if export_private_tax.present?
+                export_private_tax
+              else
+                create_specific_tax(item, 'export_private_eu_vat')
+              end
+            elsif item.present?
+              # Import tax from onoma with country_tax_code (:fr)
+              Tax.import_from_nomenclature(item.name)
             end
+          end
+
+          def create_specific_tax(item, nature)
+            # item in Onoma does not have the good nature, we want a specific comportment with accounting
+            tax_nature = Onoma::TaxNature.find(nature)
+            if tax_nature.computation_method != :percentage
+              raise StandardError.new('Can import only percentage computed taxes')
+            end
+
+            attributes = {
+              amount: item.amount,
+              name: item.human_name + ' EPV',
+              nature: tax_nature,
+              country: item.country,
+              active: true,
+              reference_name: item.name
+            }
+
+            %i[deduction collect fixed_asset_deduction fixed_asset_collect].each do |account|
+              next unless name = tax_nature.send("#{account}_account")
+
+              tax_radical = Account.find_or_import_from_nomenclature(name)
+              # check account_number_digits to build correct account number
+              account_number_digits = Preference[:account_number_digits] - 2
+              tax_account = Account.find_or_create_by_number("#{tax_radical.number[0..account_number_digits]}#{tax_nature.suffix}")
+              tax_account.name = item.human_name + ' EPV'
+              tax_account.usages = tax_radical.usages
+              tax_account.save!
+
+              attributes["#{account}_account_id"] = tax_account.id
+            end
+            Tax.create!(attributes)
           end
 
       end

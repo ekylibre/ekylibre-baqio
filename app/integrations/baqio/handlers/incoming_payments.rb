@@ -19,9 +19,12 @@ module Integrations
         private
 
           def create_update_or_delete_incoming_payment(sale, payment_link)
-            mode = IncomingPaymentMode.of_provider_vendor(@vendor).of_provider_data(:id,
-                                                                                    payment_link[:payment][:payment_source_id].to_s).first
-            incoming_payment = IncomingPayment.of_provider_vendor(@vendor).of_provider_data(:id, payment_link[:payment][:id].to_s).first
+            mode = IncomingPaymentMode.of_provider_vendor(@vendor)
+                                      .of_provider_data(:id, payment_link[:payment][:payment_source_id].to_s)
+                                      .first
+            incoming_payment = IncomingPayment.of_provider_vendor(@vendor)
+                                      .of_provider_data(:id, payment_link[:payment][:id].to_s)
+                                      .first
 
             baqio_payment_amount = payment_link[:payment][:amount_cents].to_d * 0.01
             baqio_payment_date = Date.parse(payment_link[:payment][:date].to_s).to_time

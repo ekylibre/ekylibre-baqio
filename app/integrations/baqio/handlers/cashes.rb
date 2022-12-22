@@ -9,6 +9,7 @@ module Integrations
         def initialize(vendor:, bank_informations: Integrations::Baqio::Data::BankInformations.new.result )
           @vendor = vendor
           @bank_informations = bank_informations
+          @cf = create_custom_fields
         end
 
         def bulk_find_or_create
@@ -24,7 +25,12 @@ module Integrations
 
           def find_existant_cash(bank_information)
             iban = bank_information[:iban].gsub(/\s+/, '')
-            Cash.find_by(iban: iban)
+            cash = Cash.find_by(iban: iban)
+            unless cash.custom_value(@cf) == bank_information[:id].to_s
+              cash.set_custom_value(@cf, bank_information[:id].to_s)
+              cash.save!
+            end
+            cash
           end
 
           def create_cash(bank_information)
@@ -43,6 +49,8 @@ module Integrations
               bank_account_holder_name: bank_information[:owner],
               by_default: bank_information[:primary]
             )
+            cash.set_custom_value(@cf, bank_information[:id].to_s)
+            cash.save
           end
 
           def find_or_create_account(bank_information)
@@ -70,7 +78,7 @@ module Integrations
               account = Account.create!(
                 number: baqio_account_number,
                 name: 'Banque ' + bank_information[:domiciliation],
-                provider: { vendor: @vendor, name: 'Baqio_bank_information', data: { id: bank_information[:id].to_s } }
+                provider: provider_value(id: bank_information[:id].to_s)
               )
             end
           end
@@ -89,8 +97,32 @@ module Integrations
               name: 'Banque ' + bank_information[:domiciliation],
               nature: 'bank',
               code: "BQB#{baqio_journal_code}",
-              provider: { vendor: @vendor, name: 'Baqio_bank_information', data: { id: bank_information[:id].to_s } }
+              provider: provider_value(id: bank_information[:id].to_s)
             )
+          end
+
+          # providable methods
+          def provider_value(**data)
+            { vendor: @vendor, name: provider_name, data: data }
+          end
+
+          def provider_name
+            'Baqio_bank_information'
+          end
+
+          def create_custom_fields
+            k = :bank_information_id
+            v = 'Identifiant bancaire Baqio'
+            # create custom field if not exist
+            if cf = CustomField.find_by(column_name: k.to_s, customized_type: 'Cash')
+              cf
+            else
+              CustomField.create!(name: v, customized_type: 'Cash',
+                                         nature: 'text',
+                                         active: true,
+                                         required: false,
+                                         column_name: k.to_s)
+            end
           end
 
       end
