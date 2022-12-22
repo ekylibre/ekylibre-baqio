@@ -143,13 +143,15 @@ module Integrations
             country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
             country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
             baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
-            item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym) if country_tax_code.present? && country_tax_type.present?
+            if country_tax_code.present? && country_tax_type.present?
+              item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
+            end
             # tax already present in Ekylibre
             if baqio_tax.present?
               baqio_tax
             # Case 'EU particular sale'
             # https://www.comprendrelacompta.com/achat-vente-biens-hors-france/
-          elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
+            elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
               export_private_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: 'export_private_eu_vat')
               # Check if tax present with option 'export_private_eu_vat' or create it with item found in Onoma
               if export_private_tax.present?
