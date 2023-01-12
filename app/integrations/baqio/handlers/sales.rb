@@ -22,7 +22,7 @@ module Integrations
           @page = 0
 
           loop do
-            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result
+            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result.compact
 
             data_orders.each do |order|
               next if order[:state] == ('pending' || 'draft')

@@ -16,6 +16,8 @@ module Integrations
 
         def format_data(list)
           list.map do |order|
+            next if order[:customer].nil?
+
             data_order = order.filter { |k, _v| simple_desired_fields.include?(k) }
             data_order[:customer] = format_order_customer(order[:customer])
             data_order[:order_lines_not_deleted] = format_order_lines_not_deleted(order[:order_lines_not_deleted])
