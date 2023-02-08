@@ -59,7 +59,7 @@ module Integrations
               create_sale_items(sale, order)
               # Update sale provider with new updated_at
               sale.provider = { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } }
-              sale.reference_number = order[:invoice_debit][:name] if baqio_sale_state == :invoice
+              sale.reference_number = order[:invoice_debit][:name] if baqio_sale_state == :invoice && order[:invoice_debit].present?
               sale.save!
 
               update_sale_state(sale, order)
@@ -80,7 +80,7 @@ module Integrations
             create_sale_items(sale, order)
             sale.save!
             sale.update!(created_at: order[:created_at].to_time)
-            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state].to_sym] == :invoice
+            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state].to_sym] == :invoice && order[:invoice_debit].present?
 
             update_sale_state(sale, order)
             attach_pdf_to_sale(sale, order[:invoice_debit])
