@@ -38,7 +38,7 @@ module Integrations
           end
 
           def simple_desired_fields
-            %i[id name state date updated_at created_at total_price_cents invoice_debit invoice_credit tax_lines accounting_tax]
+            %i[id name state date updated_at created_at total_price_cents invoice_debit receipt_debit invoice_credit tax_lines accounting_tax]
           end
 
           def format_order_customer(order_customer)

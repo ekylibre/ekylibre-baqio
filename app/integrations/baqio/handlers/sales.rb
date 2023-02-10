@@ -59,11 +59,13 @@ module Integrations
               create_sale_items(sale, order)
               # Update sale provider with new updated_at
               sale.provider = { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } }
-              sale.reference_number = order[:invoice_debit][:name] if baqio_sale_state == :invoice && order[:invoice_debit].present?
+
+              debit_nature = order[:invoice_debit] || order[:receipt_debit]
+              sale.reference_number = debit_nature[:name] if baqio_sale_state == :invoice && debit_nature.present?
               sale.save!
 
               update_sale_state(sale, order)
-              attach_pdf_to_sale(sale, order[:invoice_debit]) if baqio_sale_state == :invoice
+              attach_pdf_to_sale(sale, debit_nature) if baqio_sale_state == :invoice
             end
 
             create_update_or_delete_incoming_payments(sale, order)
@@ -80,10 +82,11 @@ module Integrations
             create_sale_items(sale, order)
             sale.save!
             sale.update!(created_at: order[:created_at].to_time)
-            sale.update!(reference_number: order[:invoice_debit][:name]) if BQ_STATE[order[:state].to_sym] == :invoice && order[:invoice_debit].present?
+            debit_nature = order[:invoice_debit] || order[:receipt_debit]
+            sale.update!(reference_number: debit_nature[:name]) if BQ_STATE[order[:state].to_sym] == :invoice && debit_nature.present?
 
             update_sale_state(sale, order)
-            attach_pdf_to_sale(sale, order[:invoice_debit])
+            attach_pdf_to_sale(sale, debit_nature)
 
             create_update_or_delete_incoming_payments(sale, order)
             cancel_and_create_sale_credit(sale, order)
