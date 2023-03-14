@@ -76,8 +76,8 @@ module Baqio
       end
     end
 
-    def fetch_product_variants
-      get_json(base_url + VARIANTS_URL, authentication_header) do |r|
+    def fetch_product_variants(page)
+      get_json(base_url + VARIANTS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end

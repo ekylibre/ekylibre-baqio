@@ -10,11 +10,19 @@ module Integrations
         end
 
         def bulk_find_or_create
-          Integrations::Baqio::Data::ProductVariants.new.result.each do |product_variant|
-            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_variant[:id].to_s).first
-            next if product_nature_variant.present?
+          @page = 0
 
-            create_product_variant(product_variant)
+          loop do
+            product_variants = Integrations::Baqio::Data::ProductVariants.new(@page +=1).result.compact
+
+            product_variants.each do |product_variant|
+              product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_variant[:id].to_s).first
+              next if product_nature_variant.present?
+  
+              create_product_variant(product_variant)
+            end
+
+            break if product_variants.blank? || @page == 50
           end
         end
 
