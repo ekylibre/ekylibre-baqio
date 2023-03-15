@@ -4,6 +4,10 @@ module Integrations
   module Baqio
     module Data
       class ProductVariants
+        def initialize(page_number)
+          @page_number = page_number
+        end
+
         def result
           @formated_data ||= call_api
         end
@@ -24,7 +28,7 @@ module Integrations
         private
 
           def call_api
-            ::Baqio::BaqioIntegration.fetch_product_variants.execute do |c|
+            ::Baqio::BaqioIntegration.fetch_product_variants(@page_number).execute do |c|
               c.success do |list|
                 format_data(list)
               end
