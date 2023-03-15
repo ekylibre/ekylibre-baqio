@@ -18,7 +18,7 @@ module Integrations
             product_variants.each do |product_variant|
               product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_variant[:id].to_s).first
               next if product_nature_variant.present?
-  
+
               create_product_variant(product_variant)
             end
 
