@@ -14,15 +14,16 @@ module Integrations
           cancelled: :invoice
         }.freeze
 
-        def initialize(vendor:)
+        def initialize(vendor:, user_id:)
           @vendor = vendor
+          @user_id = user_id
         end
 
         def bulk_find_or_create
           @page = 0
 
           loop do
-            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result.compact
+            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1, @user_id).result.compact
 
             data_orders.each do |order|
               next if order[:state] == ('pending' || 'draft')
@@ -135,8 +136,10 @@ module Integrations
                                       data: { id: order[:invoice_credit][:id], order_id: order[:invoice_credit][:order_id] }
                                       }
               sale_credit.save!
+
               invoiced_date = order[:invoice_credit][:created_at].to_time
               sale_credit.update!(created_at: invoiced_date, confirmed_at: invoiced_date, invoiced_at: invoiced_date)
+
               sale_credit.invoice!
 
               attach_pdf_to_sale(sale_credit, order[:invoice_credit])

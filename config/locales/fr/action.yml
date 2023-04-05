@@ -9,6 +9,7 @@ fra:
     api_secret: Secret
     correct_baqio_fetch_params: "La synchronisation Baqio est terminée, les nouvelles ventes sont disponibles dans Ekyviti"
     failed_baqio_fetch_params: "Une erreur s'est produite lors de la synchronisation Baqio."
+    failed_sync_order_without_customer: "Une vente n'a pas été synchronisé, veuillez associer un client à la vente sur Baqio"
     last_sales_baqio: "Dernières ventes Baqio"
     financial_year_exchange_open_baqio_integration: "Un échange comptable est actuellement ouvert. Vous ne pouvez donc pas synchroniser vos ventes Baqio."
     financial_year_exchange_open_baqio: "La synchronisation des ventes Baqio ne pourra être faite tant que l'échange comptable sera ouvert"

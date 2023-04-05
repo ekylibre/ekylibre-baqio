@@ -4,8 +4,9 @@ module Integrations
   module Baqio
     module Data
       class Orders
-        def initialize(page_number)
+        def initialize(page_number, user_id)
           @page_number = page_number
+          @user_id = user_id
           @max_date = FinancialYear.where(state: 'opened').map{ |date| date.stopped_on.to_time }
           @min_date = FinancialYear.where(state: 'opened').map{ |date| date.started_on.to_time }
         end
@@ -15,7 +16,8 @@ module Integrations
         end
 
         def format_data(list)
-          list.map do |order|
+          list.map do |order| 
+            notification_order_without_customer(order[:id]) if order[:customer].nil?
             next if order[:customer].nil?
 
             data_order = order.filter { |k, _v| simple_desired_fields.include?(k) }
@@ -85,6 +87,24 @@ module Integrations
           def format_order_payment_sources_payment(order_payment_sources_payment)
             desired_fields = %i[id payment_source_id amount_cents date amount_currency deleted_at]
             order_payment_sources_payment.filter { |k, _v| desired_fields.include?(k) }
+          end
+
+          def notification_order_without_customer(order_id)
+            notif_params = error_baqio_order_without_customer(order_id)
+            if (user = User.find_by_id(@user_id))
+              locale = user.language.present? ? user.language.to_sym : :eng
+              I18n.with_locale(locale) do
+                user.notifications.create!(notif_params)
+              end
+            end
+          end
+
+          def error_baqio_order_without_customer(order_id)
+            {
+              message: :failed_sync_order_without_customer.tl + " (id: #{order_id})",
+              level: :error,
+              interpolations: {}
+            }
           end
       end
     end
