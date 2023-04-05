@@ -16,7 +16,7 @@ module Integrations
         end
 
         def format_data(list)
-          list.map do |order| 
+          list.map do |order|
             notification_order_without_customer(order[:id]) if order[:customer].nil?
             next if order[:customer].nil?
 
