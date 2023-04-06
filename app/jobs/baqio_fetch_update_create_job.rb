@@ -25,7 +25,7 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
       product_nature_variant = Integrations::Baqio::Handlers::ProductNatureVariants.new(vendor: VENDOR)
       product_nature_variant.bulk_find_or_create
 
-      sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR)
+      sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR, user_id: user_id)
       sales.bulk_find_or_create
     rescue StandardError => error
       Rails.logger.error $ERROR_INFO

@@ -9,4 +9,5 @@ eng:
     api_secret: Secret
     correct_baqio_fetch_params: "Baqio synchronisation is over, New sales are available in Ekylibre."
     failed_baqio_fetch_params: "An error occured during Baqio synchronisation."
+    failed_sync_order_without_customer: "A sale has not been synchronized, please associate a customer with the sale on Baqio"
     last_sales_baqio: "Last Baqio sales"
