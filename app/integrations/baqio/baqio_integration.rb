@@ -43,6 +43,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -53,6 +54,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -63,6 +65,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -73,6 +76,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -81,6 +85,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -90,6 +95,7 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
@@ -111,6 +117,7 @@ module Baqio
         end
         r.error :wrong_password if r.state == '401'
         r.error :no_account_exist if r.state == '404'
+        r.error :too_many_requests if r.state == '429'
       end
     end
 
