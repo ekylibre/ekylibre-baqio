@@ -7,8 +7,8 @@ module Integrations
         def initialize(page_number, user_id)
           @page_number = page_number
           @user_id = user_id
-          @max_date = FinancialYear.where(state: 'opened').map{ |date| date.stopped_on.to_time }
-          @min_date = FinancialYear.where(state: 'opened').map{ |date| date.started_on.to_time }
+          @max_date = Time.now
+          @min_date = FinancialYear.opened.current.started_on.to_time
         end
 
         def result
@@ -34,7 +34,7 @@ module Integrations
           def call_api
             ::Baqio::BaqioIntegration.fetch_orders(@page_number).execute do |c|
               c.success do |list|
-                format_data(list.select { |order| @max_date.max > order[:date].to_time && order[:date].to_time > @min_date.min } )
+                format_data(list.select { |order| @max_date > order[:date].to_time && order[:date].to_time > @min_date } )
               end
             end
           end
@@ -51,7 +51,7 @@ module Integrations
           end
 
           def format_order_customer_billing_information(billing_information)
-            desired_fields = %i[first_name last_name company_name city zip mobile address1 email website country_code]
+            desired_fields = %i[first_name last_name company_name city zip mobile vat_number phone address1 email website country_code]
             billing_information.filter { |k, _v| desired_fields.include?(k) }
           end
 
