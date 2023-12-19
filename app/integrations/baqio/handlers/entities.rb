@@ -37,6 +37,7 @@ module Integrations
               last_name: custom_name,
               client: true,
               country: billing_information[:country_code].lower,
+              vat_number: ( billing_information[:vat_number].present? ? billing_information[:vat_number] : nil ),
               provider: {
                     vendor: @vendor,
                     name: 'Baqio_order_customer',
@@ -65,6 +66,7 @@ module Integrations
 
             entity_addresses = Array.new([
               { mobile: order_customer[:billing_information][:mobile] },
+              { phone: order_customer[:billing_information][:phone] },
               { zip_city: zip_city, country_code: country_code, mail: order_customer[:billing_information][:address1] },
               { email: is_email_valid?(baqio_email) ? baqio_email : nil },
               { website: order_customer[:billing_information][:website] }
@@ -73,20 +75,15 @@ module Integrations
             # Create EntityAddress for every valid entity_addresses got from Baqio
             entity_addresses.each do |entity_address|
               unless entity_address.values.first.blank?
-                if entity_address.keys.last == :mail
-                  EntityAddress.create!(
-                    entity_id: entity.id,
-                    canal: 'mail',
+                if entity_address.keys.last == :mail && !entity.mails.where('mail_line_6 ILIKE ?', entity_address[:zip_city]).where(mail_country: entity_address[:country_code]).any?
+                  entity.mails.create!(
+                    by_default: true,
                     mail_line_4: entity_address[:mail],
                     mail_line_6: entity_address[:zip_city],
-                    mail_country:  entity_address[:country_code]
+                    mail_country: entity_address[:country_code]
                   )
-                else
-                  EntityAddress.create!(
-                    entity_id: entity.id,
-                    canal: entity_address.keys.first.to_s,
-                    coordinate: entity_address.values.first
-                  )
+                elsif !entity.send(entity_address.keys.first.to_s.pluralize).where(coordinate: entity_address.values.first.lower).any?
+                  entity.send(entity_address.keys.first.to_s.pluralize).create!(by_default: true, coordinate: entity_address.values.first.lower)
                 end
               end
             end
