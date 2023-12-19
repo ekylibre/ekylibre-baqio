@@ -26,9 +26,11 @@ module Integrations
           def find_existant_cash(bank_information)
             iban = bank_information[:iban].gsub(/\s+/, '')
             cash = Cash.find_by(iban: iban)
-            unless cash.custom_value(@cf) == bank_information[:id].to_s
-              cash.set_custom_value(@cf, bank_information[:id].to_s)
-              cash.save!
+            if cash.present?
+              if cash.custom_value(@cf) != bank_information[:id].to_s
+                cash.set_custom_value(@cf, bank_information[:id].to_s)
+                cash.save!
+              end
             end
             cash
           end
