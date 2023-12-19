@@ -8,37 +8,48 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   def perform(user_id: nil)
     Preference.set!(:baqio_fetch_job_running, true, :boolean)
+    user = User.find_by_id(user_id)
+    unless FinancialYear.opened.current
+      @error = :no_financial_year_opened.tl
+      if user
+        user.notifications.create!(error_during_baqio_api_call)
+      else
+        ExceptionNotifier.notify_exception($ERROR_INFO, data: { message: @error })
+      end
+    end
+
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
       pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR)
       pnc_handler.bulk_find_or_create
 
-      # TODO: call create or update cashes from baqio api
+      # call create or update cashes from baqio api
       cash_handler = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR)
       cash_handler.bulk_find_or_create
 
-      # TODO: create or update incoming_payment_mode from baqio api
+      # create or update incoming_payment_mode from baqio api
       incoming_payment_mode_handler = Integrations::Baqio::Handlers::IncomingPaymentModes.new(vendor: VENDOR)
       incoming_payment_mode_handler.bulk_find_or_create
 
-      # TODO: create or update product_nature_variant from baqio api
+      # create or update product_nature_variant from baqio api
       product_nature_variant = Integrations::Baqio::Handlers::ProductNatureVariants.new(vendor: VENDOR)
       product_nature_variant.bulk_find_or_create
 
+      # create or update sales from baqio api
       sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR, user_id: user_id)
-      sales.bulk_find_or_create
+      result = sales.bulk_find_or_create
     rescue StandardError => error
       Rails.logger.error $ERROR_INFO
       Rails.logger.error $ERROR_INFO.backtrace.join("\n")
       @error = error
       ExceptionNotifier.notify_exception($ERROR_INFO, data: { message: error })
     end
-    if (user = User.find_by_id(user_id))
+    if user
       ActionCable.server.broadcast("main_#{user.email}", event: 'update_job_over')
-      notif_params =  if @error.nil?
-                        correct_baqio_fetch_params
+      notif_params =  if @error.present?
+                        error_during_baqio_api_call
                       else
-                        errors_baqio_fetch_params
+                        correct_baqio_fetch_params(result)
                       end
       locale = user.language.present? ? user.language.to_sym : :eng
       I18n.with_locale(locale) do
@@ -50,20 +61,26 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
   private
 
-    def errors_baqio_fetch_params
+    def error_during_baqio_api_call
       {
-        message: :failed_baqio_fetch_params.tl,
+        message: :error_during_baqio_api_call.tl,
         level: :error,
-        interpolations: {}
+        interpolations: {
+          error: @error
+        }
       }
     end
 
-    def correct_baqio_fetch_params
+    def correct_baqio_fetch_params(result)
       {
-        message: :correct_baqio_fetch_params.tl,
+        message: :success_sync_baqio.tl,
         level: :success,
         target_url: '/backend/sales',
-        interpolations: {}
+        interpolations: {
+          created: result[:created].to_s,
+          updated: result[:updated].to_s,
+          last_sale_number_created: result[:last_sale_number_created].to_s
+        }
       }
     end
 end

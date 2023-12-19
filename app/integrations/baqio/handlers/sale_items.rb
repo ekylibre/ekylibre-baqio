@@ -137,35 +137,47 @@ module Integrations
 
           def find_or_create_baqio_country_tax(tax_line, order)
             country_tax_id = tax_line.first[:country_tax_id].to_i
-            country_tax_baqio = Integrations::Baqio::Data::CountryTaxes.new(country_tax_id: country_tax_id).result.first
+            # tax already present in Ekylibre with Baqio provider
+            tax = Tax.of_provider_vendor(@vendor).of_provider_data(:id, country_tax_id.to_s).first
+            unless tax
+              country_tax_baqio = Integrations::Baqio::Data::CountryTaxes.new(country_tax_id: country_tax_id).result.first
 
-            country_tax_code = country_tax_baqio[:code].downcase
-            country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
-            country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
-            baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
-            if country_tax_code.present? && country_tax_type.present?
-              item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
-            end
-            # tax already present in Ekylibre
-            if baqio_tax.present?
-              baqio_tax
-            # Case 'EU particular sale'
-            # https://www.comprendrelacompta.com/achat-vente-biens-hors-france/
-            elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
-              export_private_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: 'export_private_eu_vat')
-              # Check if tax present with option 'export_private_eu_vat' or create it with item found in Onoma
-              if export_private_tax.present?
-                export_private_tax
-              else
-                create_specific_tax(item, 'export_private_eu_vat')
+              country_tax_code = country_tax_baqio[:code].downcase
+              country_tax_percentage = country_tax_baqio[:tax_percentage].to_f
+              country_tax_type = BAQIO_TAX_TYPE_TO_EKY[country_tax_baqio[:tax_type].to_sym]
+
+              baqio_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: country_tax_type)
+              if country_tax_code.present? && country_tax_type.present?
+                item = Onoma::Tax.find_by(country: country_tax_code.to_sym, amount: country_tax_percentage, nature: country_tax_type.to_sym)
               end
-            elsif item.present?
-              # Import tax from onoma with country_tax_code (:fr)
-              Tax.import_from_nomenclature(item.name)
+              # tax already present in Ekylibre
+              if baqio_tax.present?
+                baqio_tax.provider = { vendor: @vendor, name: 'Baqio_tax', data: { id: country_tax_baqio[:id].to_s, updated_at: country_tax_baqio[:updated_at] } }
+                baqio_tax.save!
+                tax = baqio_tax
+              # Case 'EU particular sale'
+              # https://www.comprendrelacompta.com/achat-vente-biens-hors-france/
+              elsif item.present? && ( order[:accounting_tax] == 'eu' || EU_CT_CODE.include?(order[:accounting_tax])) && order[:customer][:billing_information][:legal_form].blank? && order[:customer][:billing_information][:vat_number].blank?
+                export_private_tax = Tax.find_by(country: country_tax_code, amount: country_tax_percentage, nature: 'export_private_eu_vat')
+                # Check if tax present with option 'export_private_eu_vat' or create it with item found in Onoma
+                if export_private_tax.present?
+                  export_private_tax.provider = { vendor: @vendor, name: 'Baqio_tax', data: { id: country_tax_baqio[:id].to_s, updated_at: country_tax_baqio[:updated_at] } }
+                  export_private_tax.save!
+                  tax = export_private_tax
+                else
+                  tax = create_specific_tax(item, 'export_private_eu_vat', country_tax_baqio)
+                end
+              elsif item.present?
+                # Import tax from onoma with country_tax_code (:fr)
+                tax = Tax.import_from_nomenclature(item.name)
+                tax.provider = { vendor: @vendor, name: 'Baqio_tax', data: { id: country_tax_baqio[:id].to_s, updated_at: country_tax_baqio[:updated_at] } }
+                tax.save!
+              end
             end
+            tax
           end
 
-          def create_specific_tax(item, nature)
+          def create_specific_tax(item, nature, country_tax_baqio)
             # item in Onoma does not have the good nature, we want a specific comportment with accounting
             tax_nature = Onoma::TaxNature.find(nature)
             if tax_nature.computation_method != :percentage
@@ -178,7 +190,8 @@ module Integrations
               nature: tax_nature,
               country: item.country,
               active: true,
-              reference_name: item.name
+              reference_name: item.name,
+              provider: { vendor: @vendor, name: 'Baqio_tax', data: { id: country_tax_baqio[:id].to_s, updated_at: country_tax_baqio[:updated_at] } }
             }
 
             %i[deduction collect fixed_asset_deduction fixed_asset_collect].each do |account|

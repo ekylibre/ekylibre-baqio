@@ -5,6 +5,8 @@ module Integrations
     module Handlers
       class Sales
 
+        attr_accessor :created, :updated, :last_sale_number_created
+
         BQ_STATE = {
           draft: :draft,
           pending: :estimate,
@@ -17,6 +19,9 @@ module Integrations
         def initialize(vendor:, user_id:)
           @vendor = vendor
           @user_id = user_id
+          @count_created = 0
+          @count_updated = 0
+          @last_sale_number = nil
         end
 
         def bulk_find_or_create
@@ -37,6 +42,7 @@ module Integrations
 
             break if data_orders.blank? || @page == 50
           end
+          { created: @count_created, updated: @count_updated, last_sale_number_created: @last_sale_number }
         end
 
         private
@@ -64,7 +70,8 @@ module Integrations
               debit_nature = order[:invoice_debit] || order[:receipt_debit]
               sale.reference_number = debit_nature[:name] if baqio_sale_state == :invoice && debit_nature.present?
               sale.save!
-
+              @count_updated += 1
+              @last_sale_number = sale.reference_number
               update_sale_state(sale, order)
               attach_pdf_to_sale(sale, debit_nature) if baqio_sale_state == :invoice
             end
@@ -82,6 +89,8 @@ module Integrations
 
             create_sale_items(sale, order)
             sale.save!
+            @count_created += 1
+            @last_sale_number = sale.reference_number
             sale.update!(created_at: order[:created_at].to_time)
             debit_nature = order[:invoice_debit] || order[:receipt_debit]
             sale.update!(reference_number: debit_nature[:name]) if BQ_STATE[order[:state].to_sym] == :invoice && debit_nature.present?
