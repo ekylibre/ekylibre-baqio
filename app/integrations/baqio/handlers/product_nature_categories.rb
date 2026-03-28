@@ -24,8 +24,10 @@ module Integrations
           end
 
           def create_product_nature_category(family_product)
-            init_category = import_product_nature_category(family_product[:kind])
+            init_category = import_product_nature_category(family_product[:lexicon_category], family_product[:kind])
             product_nature_category = ProductNatureCategory.find_or_initialize_by(name: family_product[:name])
+
+            raise StandardError.new("Missing init category from family product : #{family_product.inspect}") if init_category.nil?
 
             product_nature_category.pictogram = init_category.pictogram
             product_nature_category.active = family_product[:displayed]
@@ -36,6 +38,7 @@ module Integrations
             product_nature_category.reductible = init_category.reductible
             product_nature_category.subscribing = init_category.subscribing
             product_nature_category.product_account_id = init_category.product_account_id
+            product_nature_category.charge_account_id = init_category.charge_account_id
             product_nature_category.stock_account_id = init_category.stock_account_id
             product_nature_category.fixed_asset_depreciation_percentage = init_category.fixed_asset_depreciation_percentage
             product_nature_category.fixed_asset_depreciation_method = init_category.fixed_asset_depreciation_method
@@ -50,11 +53,13 @@ module Integrations
             product_nature_category.save!
           end
 
-          def import_product_nature_category(family_product_kind)
-            if family_product_kind == 'other'
-              ProductNatureCategory.import_from_lexicon(:additional_activity)
-            else
+          def import_product_nature_category(family_product_lexicon_category, family_product_kind)
+            if family_product_lexicon_category.present?
+              ProductNatureCategory.import_from_lexicon(family_product_lexicon_category.to_sym)
+            elsif family_product_kind.present? && family_product_kind == 'standard'
               ProductNatureCategory.import_from_lexicon(:processed_product)
+            else
+              ProductNatureCategory.import_from_lexicon(:additional_activity)
             end
           end
       end

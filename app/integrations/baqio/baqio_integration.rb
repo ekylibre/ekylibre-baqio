@@ -20,7 +20,7 @@ module Baqio
     end
 
     calls :authentication_header, :fetch_payment_sources, :fetch_bank_informations, :fetch_family_product, :fetch_orders,
-          :fetch_product_variants, :fetch_country_taxes
+          :fetch_product_variants, :fetch_country_taxes, :fetch_product_variant
 
     def base_url
       integration = fetch integration
@@ -43,6 +43,8 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
@@ -53,6 +55,8 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
@@ -63,33 +67,59 @@ module Baqio
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
     # https://api-doc.baqio.com/docs/api-doc/Baqio-Public-API.v1.json/paths/~1orders/get
-    def fetch_orders(page)
+    def fetch_orders(page, start = nil, stop = nil)
       # Call API
-      get_json(base_url + ORDERS_URL + "?page=#{page}", authentication_header) do |r|
+      if start.present? && stop.present?
+        # &q[updated_at_gteq]=2024-01-01%2000:00:00&q[updated_at_lteq]=2024-03-01%2000:00:00
+        order_url = base_url + ORDERS_URL + "?page=#{page}&q[updated_at_gteq]=#{start}%2000:00:00&q[updated_at_lteq]=#{stop}%2023:59:59"
+      else
+        order_url = base_url + ORDERS_URL + "?page=#{page}"
+      end
+      get_json(order_url, authentication_header) do |r|
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
-    def fetch_product_variants
-      get_json(base_url + VARIANTS_URL, authentication_header) do |r|
+    def fetch_product_variants(page)
+      get_json(base_url + VARIANTS_URL + "?page=#{page}", authentication_header) do |r|
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
+    # https://api-doc.baqio.com/docs/api-doc/7c08726829011-recuperation-d-une-variante-produit
+    def fetch_product_variant(variant_id)
+      get_json(base_url + VARIANTS_URL + "/#{variant_id}", authentication_header) do |r|
+        r.success do
+          list = JSON(r.body).deep_symbolize_keys
+        end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
+      end
+    end
+
+    # https://api-doc.baqio.com/docs/api-doc/fa4175e8496cf-liste-des-taxes-gerees-par-baqio
     def fetch_country_taxes
       # Call API
       get_json(base_url + COUNTRY_TAXES_URL, authentication_header) do |r|
         r.success do
           list = JSON(r.body).map(&:deep_symbolize_keys)
         end
+        r.error :too_many_requests if r.state == '429'
+        r.error :timeout if r.state == '504'
       end
     end
 
@@ -99,7 +129,6 @@ module Baqio
     # Check if the API is up
     def check(integration = nil)
       integration = fetch integration
-      puts integration.inspect.red
       string_to_encode = "#{integration.parameters['api_key']}:#{integration.parameters['api_password']}"
       auth_encode = Base64.encode64(string_to_encode).delete("\n")
       header = { authorization: "Basic #{auth_encode}", 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
@@ -111,6 +140,7 @@ module Baqio
         end
         r.error :wrong_password if r.state == '401'
         r.error :no_account_exist if r.state == '404'
+        r.error :too_many_requests if r.state == '429'
       end
     end
 

@@ -5,6 +5,8 @@ module Integrations
     module Handlers
       class Sales
 
+        attr_accessor :created, :updated, :last_sale_number_created
+
         BQ_STATE = {
           draft: :draft,
           pending: :estimate,
@@ -14,18 +16,32 @@ module Integrations
           cancelled: :invoice
         }.freeze
 
-        def initialize(vendor:)
+        def initialize(vendor:, user_id:, min_date:, max_date:)
           @vendor = vendor
+          @user_id = user_id
+          @count_created = 0
+          @count_updated = 0
+          @last_sale_number = nil
+          @min_date = min_date
+          @max_date = max_date
         end
 
         def bulk_find_or_create
           @page = 0
 
           loop do
-            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1).result.compact
+            data_orders = Integrations::Baqio::Data::Orders.new(@page +=1, @user_id, @min_date, @max_date).result.compact
 
             data_orders.each do |order|
               next if order[:state] == ('pending' || 'draft')
+
+              next if (order[:state] == 'removed' && order[:customer].nil? && order[:receipt_debit].nil? && order[:invoice_debit].nil?)
+
+              next if (order[:invoice_debit].present? && FinancialYear.on(Date.parse(order[:invoice_debit][:date])).nil?)
+
+              next if (order[:invoice_debit].blank? && FinancialYear.on(Date.parse(order[:date])).nil?)
+
+              @last_sale_number = order[:name]
               next if find_and_update_existant_sale(order).present?
 
               if order[:order_lines_not_deleted].present? && order[:state] != 'cancelled'
@@ -36,6 +52,7 @@ module Integrations
 
             break if data_orders.blank? || @page == 50
           end
+          { created: @count_created, updated: @count_updated, last_sale_number_created: @last_sale_number }
         end
 
         private
@@ -63,7 +80,8 @@ module Integrations
               debit_nature = order[:invoice_debit] || order[:receipt_debit]
               sale.reference_number = debit_nature[:name] if baqio_sale_state == :invoice && debit_nature.present?
               sale.save!
-
+              @count_updated += 1
+              @last_sale_number = sale.reference_number
               update_sale_state(sale, order)
               attach_pdf_to_sale(sale, debit_nature) if baqio_sale_state == :invoice
             end
@@ -78,12 +96,16 @@ module Integrations
               reference_number: order[:name],
               provider: { vendor: @vendor, name: 'Baqio_order', data: { id: order[:id].to_s, updated_at: order[:updated_at] } },
             )
-
-            create_sale_items(sale, order)
-            sale.save!
-            sale.update!(created_at: order[:created_at].to_time)
             debit_nature = order[:invoice_debit] || order[:receipt_debit]
-            sale.update!(reference_number: debit_nature[:name]) if BQ_STATE[order[:state].to_sym] == :invoice && debit_nature.present?
+            sale.reference_number =  debit_nature[:name] if (BQ_STATE[order[:state].to_sym] == :invoice && debit_nature.present?)
+            sale.created_at = order[:created_at].to_time
+            create_sale_items(sale, order)
+            unless sale.save!
+              raise StandardError.new("Error on creating sale #{order[:name]} : #{sale.errors.full_messages}")
+            end
+
+            @count_created += 1
+            @last_sale_number = sale.reference_number
 
             update_sale_state(sale, order)
             attach_pdf_to_sale(sale, debit_nature)
@@ -106,7 +128,11 @@ module Integrations
           end
 
           def update_sale_state(sale, order)
-            order_date = Date.parse(order[:date]).to_time
+            if order[:invoice_debit].present? && order[:invoice_debit][:date].present?
+              order_date = Date.parse(order[:invoice_debit][:date]).to_time + 12.hours
+            else
+              order_date = Date.parse(order[:date]).to_time + 12.hours
+            end
             baqio_sale_state = BQ_STATE[order[:state].to_sym]
 
             sale.correct if baqio_sale_state == :aborted
@@ -117,10 +143,10 @@ module Integrations
             sale.invoice(order_date) if baqio_sale_state == :invoice
           end
 
-          def attach_pdf_to_sale(sale, order_invoice)
-            if order_invoice.present? && order_invoice[:file_url].present? && order_invoice[:name].present?
-              doc = Document.new(file: URI.parse(order_invoice[:file_url].to_s).open, name: order_invoice[:name],
-  file_file_name: order_invoice[:name] + '.pdf')
+          def attach_pdf_to_sale(sale, debit)
+            if debit.present? && find_doc_url(debit).present? && debit[:name].present?
+              doc = Document.new(file: URI.parse(find_doc_url(debit).to_s).open, name: debit[:name],
+  file_file_name: debit[:name] + '.pdf')
               sale.attachments.create!(document: doc)
             end
           end
@@ -135,8 +161,10 @@ module Integrations
                                       data: { id: order[:invoice_credit][:id], order_id: order[:invoice_credit][:order_id] }
                                       }
               sale_credit.save!
+
               invoiced_date = order[:invoice_credit][:created_at].to_time
               sale_credit.update!(created_at: invoiced_date, confirmed_at: invoiced_date, invoiced_at: invoiced_date)
+
               sale_credit.invoice!
 
               attach_pdf_to_sale(sale_credit, order[:invoice_credit])
@@ -144,8 +172,44 @@ module Integrations
           end
 
           def find_or_create_entity(vendor, order_customer)
+            # case of order come from point of sale
+            if order_customer.nil?
+              order_customer = create_pos_entity
+            end
             entity = Integrations::Baqio::Handlers::Entities.new(vendor: vendor, order_customer: order_customer)
             entity.bulk_find_or_create
+          end
+
+          def find_doc_url(debit)
+            if debit[:file_url].present?
+              debit[:file_url]
+            elsif debit[:file].present? && debit[:file][:url].present?
+              debit[:file][:url]
+            else
+              nil
+            end
+          end
+
+          # create an entity for order coming from POS without customer informations
+          def create_pos_entity
+            {
+              id: 0,
+              name: 'POS Client Baqio',
+              billing_information: {
+                first_name: nil,
+                last_name: nil,
+                company_name: nil,
+                city: nil,
+                zip: nil,
+                mobile: nil,
+                vat_number: nil,
+                phone: nil,
+                address1: nil,
+                email: nil,
+                website: nil,
+                country_code: 'fr'
+              }
+            }
           end
 
       end

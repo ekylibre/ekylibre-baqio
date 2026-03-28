@@ -10,11 +10,30 @@ module Integrations
         end
 
         def bulk_find_or_create
-          Integrations::Baqio::Data::ProductVariants.new.result.each do |product_variant|
-            product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_variant[:id].to_s).first
-            next if product_nature_variant.present?
+          page = 1
 
-            create_product_variant(product_variant)
+          loop do
+            product_variants = Integrations::Baqio::Data::ProductVariants.new(page).result.compact
+
+            product_variants.each do |product_variant|
+              product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, product_variant[:id].to_s).first
+              next if product_nature_variant.present?
+
+              create_product_variant(product_variant)
+            end
+            page += 1
+            break if product_variants.blank? || page == 50
+          end
+        end
+
+        def find_or_create(variant_id)
+          product_nature_variant = ProductNatureVariant.of_provider_vendor(@vendor).of_provider_data(:id, variant_id.to_s).first
+          if product_nature_variant.present?
+            product_nature_variant
+          else
+            product_variant = Integrations::Baqio::Data::ProductVariant.new(variant_id).result
+            product_nature_variant = create_product_variant(product_variant)
+            product_nature_variant
           end
         end
 
@@ -24,15 +43,18 @@ module Integrations
             if product_variant[:sku] == 'ZDISCOUNT'
               create_product_nature_variant_discount_and_reduction(product_variant)
             elsif product_variant[:product][:kind] == 'standard'
-              create_product_nature_variant(product_variant)
               find_or_create_conditioning(product_variant[:product_size])
+              create_product_nature_variant(product_variant)
             elsif product_variant[:product][:kind] == 'other'
               create_product_nature_variant_additional_activity(product_variant)
             elsif product_variant[:product][:kind] == 'pack'
               create_product_nature_variant_packaging(product_variant)
+            else
+              raise StandardError.new('Missing SKU or KIND in product_variant')
             end
           end
 
+          # vin et spiritueux
           def create_product_nature_variant(product_variant)
             # Find Baqio product_family_id and product_category_id to find product nature and product category at Ekylibre
             baqio_product_category_id = product_variant[:product][:product_category_id]
@@ -47,16 +69,16 @@ module Integrations
             import_variant = ProductNatureVariant.import_from_lexicon(:wine)
             reference_unit = Unit.import_from_lexicon('liter')
 
-            # If sku is nil add product_size to name
-            name_complement = product_variant[:sku].present? ? product_variant[:sku] : product_variant[:product_size][:short_name]
-            baqio_variant_name = [product_variant[:product][:name], product_variant[:vintage], product_variant[:product][:appellation],
-                                  product_variant[:product][:product_color][:name], name_complement].reject(&:blank?).join(' - ')
+            # Build name
+            baqio_variant_name = [product_variant[:product][:name], product_variant[:product_vintage][:vintage], product_variant[:product][:appellation],
+                                  product_variant[:product][:product_color][:name], product_variant[:product_size][:name]].reject(&:blank?).join(' - ')
 
             variant = ProductNatureVariant.new
             variant.name = baqio_variant_name
             variant.category_id = product_nature_category.id
             variant.nature_id = product_nature.id
             variant.active = import_variant.active
+            variant.work_number = product_variant[:sku] if product_variant[:sku].present?
             variant.type = import_variant.type
             variant.default_quantity = 1
             variant.default_unit_name = reference_unit.reference_name
@@ -64,15 +86,19 @@ module Integrations
             variant.unit_name = 'Litre'
             variant.provider = { vendor: @vendor, name: 'Baqio_product_variant',
                                 data: { id: product_variant[:id].to_s } }
+            # set default_barcode if present
+            variant.gtin = product_variant[:default_barcode] if product_variant[:default_barcode].present?
+            # set image if present
+            variant.picture = URI.parse(product_variant[:product_vintage][:product_image_url].to_s).open if product_variant[:product_vintage][:product_image_url].present?
             variant.readings.build(
               indicator_name: 'net_volume',
               indicator_datatype: 'measure',
-              absolute_measure_value_value: 1,
-              absolute_measure_value_unit: 'liter',
-              measure_value_value: 1,
-              measure_value_unit: 'liter'
+              measure_value: Measure.new(1.0, :liter)
             )
             variant.save!
+            # set indicator
+            variant.read! :reference_year, product_variant[:product_vintage][:vintage] if product_variant[:product_vintage][:vintage].present?
+            variant.read! :certification, product_variant[:product][:appellation] if product_variant[:product][:appellation].present?
             variant
           end
 
@@ -149,13 +175,16 @@ module Integrations
           end
 
           def find_or_create_conditioning(product_size)
+            base_unit = Unit.import_from_lexicon('liter')
             conditioning_unit = Conditioning.of_provider_vendor(@vendor).of_provider_data(:id, product_size[:id].to_s).first
+            conditioning_existing = Conditioning.where(name: product_size[:name], base_unit: base_unit).first
 
             if conditioning_unit.present?
               conditioning_unit
+            elsif conditioning_existing.present?
+              conditioning_existing.update(provider: { vendor: @vendor, name: 'Baqio_product_size', data: { id: product_size[:id].to_s, updated_at: product_size[:updated_at] } })
+              conditioning_existing
             else
-              base_unit = Unit.import_from_lexicon('liter')
-
               Conditioning.create!(
                 name: product_size[:name],
                 base_unit: base_unit,

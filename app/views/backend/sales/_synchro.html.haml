@@ -1,6 +1,12 @@
 - if Integration.find_by(nature: 'baqio').present?
   - job_running = Preference.get(:baqio_fetch_job_running, false, :boolean)&.value
+  - depreciate_from = Date.today - 15.days
+  - depreciate_up = Date.today
   - main_toolbar do |t|
-    = link_to :baqio_synchronisation.tl, backend_baqio_synchro_path, class: 'btn btn-default icn btn-load update-job', disabled: job_running
+    = link_to :baqio_synchronisation.tl, backend_baqio_synchro_path(from_to: depreciate_from&.iso8601, up_to: depreciate_up&.iso8601), class: 'btn btn-default icn btn-load update-job', data: { update_link_with: '#baqio-from' }, disabled: job_running
+    %span.add-on= :from.tl.downcase
+    = date_field_tag(:from_to, depreciate_from, id: 'baqio-from', data: { max_date: Time.zone.today.iso8601 })
+    %span.add-on= :up_to.tl.downcase
+    = date_field_tag(:up_to, depreciate_up, id: 'baqio-up', disabled: true, data: { max_date: Time.zone.today.iso8601 })
     - if job_running
       = content_tag(:i, nil, class: 'bqspinner')

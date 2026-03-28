@@ -12,7 +12,7 @@ module Integrations
           10 => 'Pétillant de raisin', 11 => 'Poiré', 12 => 'Hydromel',
           13 => 'Alcool (autre que Rhum)', 14 => 'Pétillant de raisin',
           15  => 'Rhums tiers (hors DOM) et autres rhums', 16  => 'Matière première pour alcool non alimentaire',
-          17  => 'Matière première pour spiritueux'
+          17  => 'Matière première pour spiritueux', 18 => 'Cidre tranquille', 19 => 'Poiré tranquille'
         }.freeze
 
         CATEGORY = :wine
@@ -38,6 +38,8 @@ module Integrations
           def create_product_nature(product_nature_id, product_nature_category)
             init_product_nature = import_product_nature_category(product_nature_category.provider[:data]['kind'])
             init_product_nature_name = init_product_nature_name(init_product_nature, product_nature_id)
+
+            raise StandardError.new("Missing code for product nature id : #{product_nature_id}") if init_product_nature_name.nil?
 
             product_nature = ProductNature.find_or_initialize_by(name: init_product_nature_name)
 

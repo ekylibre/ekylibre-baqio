@@ -3,36 +3,34 @@
 module Integrations
   module Baqio
     module Data
-      class ProductVariants
-        def initialize(page_number)
-          @page_number = page_number
+      class ProductVariant
+        def initialize(variant_id)
+          @variant_id = variant_id
         end
 
         def result
           @formated_data ||= call_api
         end
 
-        def format_data(list)
-          list.map do |product_variant|
-            data_product_variant = product_variant.filter { |k, _v| main_desired_fields.include?(k) }
-            data_product_variant[:product] = format_product_variants_product(product_variant[:product])
+        def format_data(product_variant)
+          data_product_variant = product_variant.filter { |k, _v| main_desired_fields.include?(k) }
+          data_product_variant[:product] = format_product_variants_product(product_variant[:product])
 
-            if product_variant[:product_size].present?
-              data_product_variant[:product_size] = format_product_variants_product_size(product_variant[:product_size])
-            end
-
-            if product_variant[:product_vintage].present?
-              data_product_variant[:product_vintage] = format_product_variants_product_vintage(product_variant[:product_vintage])
-            end
-
-            data_product_variant
+          if product_variant[:product_size].present?
+            data_product_variant[:product_size] = format_product_variants_product_size(product_variant[:product_size])
           end
+
+          if product_variant[:product_vintage].present?
+            data_product_variant[:product_vintage] = format_product_variants_product_vintage(product_variant[:product_vintage])
+          end
+
+          data_product_variant
         end
 
         private
 
           def call_api
-            ::Baqio::BaqioIntegration.fetch_product_variants(@page_number).execute do |c|
+            ::Baqio::BaqioIntegration.fetch_product_variant(@variant_id).execute do |c|
               c.success do |list|
                 format_data(list)
               end
@@ -53,12 +51,11 @@ module Integrations
           def format_product_variants_product_vintage(product_variants_product_vintage)
             desired_fields = %i[vintage primeur grapes wine_ageing]
             data = product_variants_product_vintage.filter { |k, _v| desired_fields.include?(k) }
-            data[:product_image_url] = product_variants_product_vintage[:product_images].first[:image_url] if product_variants_product_vintage[:product_images].any?
             data
           end
 
           def format_product_variants_product_size(product_variants_product_size)
-            desired_fields = %i[id name milliliters short_name kind updated_at]
+            desired_fields = %i[id name short_name kind updated_at]
             data = product_variants_product_size.filter { |k, _v| desired_fields.include?(k) }
             data
           end

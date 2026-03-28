@@ -24,8 +24,9 @@ module Integrations
             end
           end
 
+          # handle [stripe, gocardless]
           def desired_fields
-            %i[id name bank_information_id]
+            %i[id handle name bank_information_id]
           end
 
       end
