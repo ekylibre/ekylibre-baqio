@@ -144,11 +144,19 @@ module Integrations
           end
 
           def attach_pdf_to_sale(sale, debit)
-            if debit.present? && find_doc_url(debit).present? && debit[:name].present?
-              doc = Document.new(file: URI.parse(find_doc_url(debit).to_s).open, name: debit[:name],
-  file_file_name: debit[:name] + '.pdf')
-              sale.attachments.create!(document: doc)
-            end
+            return unless debit.present? && find_doc_url(debit).present? && debit[:name].present?
+
+            # Paperclip acceptait l'io sous `file:` et le nom sous
+            # `file_file_name:`. Depuis le passage du cœur à Active Storage
+            # (lot A.3 du plan v6) le contenu s'attache explicitement, et
+            # `file_file_name` n'est plus une colonne : elle est relue depuis
+            # le blob. La clé du document reste calculée par Document lui-même,
+            # à partir du nom de fichier, une fois la pièce jointe attachée.
+            document = Document.new(name: debit[:name])
+            document.file.attach(io: URI.parse(find_doc_url(debit).to_s).open,
+                                 filename: "#{debit[:name]}.pdf",
+                                 content_type: 'application/pdf')
+            sale.attachments.create!(document: document)
           end
 
           def cancel_and_create_sale_credit(sale, order)
