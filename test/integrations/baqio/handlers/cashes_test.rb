@@ -20,7 +20,7 @@ module Integrations
         end
 
         test "If cash doesn't exist, it create a new cash with correct attributes" do
-          Integrations::Baqio::Handlers::Cashes.new(vendor: EkylibreBaqio::VENDOR,
+          Baqio::Handlers::Cashes.new(vendor: EkylibreBaqio::VENDOR,
 bank_informations: @bank_informations).bulk_find_or_create
           cash = Cash.order(created_at: :desc).first
           assert_equal(@bank_information[:domiciliation], cash.name )

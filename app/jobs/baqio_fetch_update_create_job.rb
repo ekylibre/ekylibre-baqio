@@ -20,27 +20,27 @@ class BaqioFetchUpdateCreateJob < ActiveJob::Base
 
     begin
       # Create ProductNatureCategory and ProductNature from Baqio product_families
-      pnc_handler = Integrations::Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR)
+      pnc_handler = Baqio::Handlers::ProductNatureCategories.new(vendor: VENDOR)
       pnc_handler.bulk_find_or_create
 
       # call create or update cashes from baqio api
-      cash_handler = Integrations::Baqio::Handlers::Cashes.new(vendor: VENDOR)
+      cash_handler = Baqio::Handlers::Cashes.new(vendor: VENDOR)
       cash_handler.bulk_find_or_create
 
       # create or update incoming_payment_mode from baqio api
-      incoming_payment_mode_handler = Integrations::Baqio::Handlers::IncomingPaymentModes.new(vendor: VENDOR)
+      incoming_payment_mode_handler = Baqio::Handlers::IncomingPaymentModes.new(vendor: VENDOR)
       incoming_payment_mode_handler.bulk_find_or_create
 
       # create or update product_nature_variant from baqio api
-      product_nature_variant = Integrations::Baqio::Handlers::ProductNatureVariants.new(vendor: VENDOR)
+      product_nature_variant = Baqio::Handlers::ProductNatureVariants.new(vendor: VENDOR)
       product_nature_variant.bulk_find_or_create
 
       # create Tax from baqio api
-      tax = Integrations::Baqio::Handlers::CountryTaxes.new(vendor: VENDOR)
+      tax = Baqio::Handlers::CountryTaxes.new(vendor: VENDOR)
       tax.bulk_find_or_create
 
       # create or update sales from baqio api
-      sales = Integrations::Baqio::Handlers::Sales.new(vendor: VENDOR, user_id: user_id, min_date: from_to, max_date: up_to)
+      sales = Baqio::Handlers::Sales.new(vendor: VENDOR, user_id: user_id, min_date: from_to, max_date: up_to)
       result = sales.bulk_find_or_create
     rescue StandardError => error
       Rails.logger.error $ERROR_INFO
