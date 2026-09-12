@@ -12,10 +12,6 @@ module EkylibreBaqio
       app.config.x.beehive.cell_controller_types << :last_sales_baqio
     end
 
-    initializer :ekylibre_baqio_beehive do |app|
-      app.config.x.beehive.cell_controller_types << :last_sales_baqio
-    end
-
     initializer :ekylibre_baqio_import_javascript do
       tmp_file = Rails.root.join('tmp', 'plugins', 'javascript-addons', 'plugins.js.coffee')
       tmp_file.open('a') do |f|
